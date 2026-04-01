@@ -51,6 +51,10 @@ meanrev_returns = run_backtest(meanrev_signals, returns)
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
 meanrev_cumulative = compute_cumulative_returns(meanrev_returns)
 
+combined_returns = 0.5 * momentum_returns + 0.5 * meanrev_returns
+combined_cumulative = (1 + combined_returns).cumprod()
+combined_metrics = compute_performance_metrics(combined_returns)
+
 # Compute strategy metrics
 momentum_metrics = compute_performance_metrics(momentum_returns)
 meanrev_metrics = compute_performance_metrics(meanrev_returns)
@@ -78,6 +82,12 @@ print("\nSPY Benchmark Metrics:")
 for key, value in benchmark_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nCombined Strategy Metrics:")
+for key, value in combined_metrics.items():
+    print(f"{key}: {value:.4f}")
+
+print(f"Combined: {combined_cumulative.iloc[-1]:.4f}")
+
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
@@ -88,6 +98,7 @@ plt.figure(figsize=(10, 6))
 plt.plot(momentum_cumulative, label="Momentum")
 plt.plot(meanrev_cumulative, label="Mean Reversion")
 plt.plot(benchmark_cumulative, label="SPY")
+plt.plot(combined_cumulative, label="Combined")
 
 plt.title("Strategy Comparison")
 plt.xlabel("Date")
