@@ -16,6 +16,8 @@ tickers = [
 ]
 benchmark_ticker = ["SPY"]
 
+transaction_cost = 0.001
+
 start = "2020-01-01"
 end = "2023-01-01"
 
@@ -44,8 +46,17 @@ meanrev_signals = generate_mean_reversion_signals(
 )
 
 # Run backtests
-momentum_returns = run_backtest(momentum_signals, returns)
-meanrev_returns = run_backtest(meanrev_signals, returns)
+momentum_returns = run_backtest(
+    momentum_signals,
+    returns,
+    transaction_cost=transaction_cost
+)
+
+meanrev_returns = run_backtest(
+    meanrev_signals,
+    returns,
+    transaction_cost=transaction_cost
+)
 
 # Compute cumulative returns
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
