@@ -36,7 +36,8 @@ returns = compute_daily_returns(prices)
 momentum_signals = generate_momentum_signals(
     prices,
     lookback=momentum_lookback,
-    top_n=top_n
+    top_n=top_n,
+    buffer_n=5
 )
 
 meanrev_signals = generate_mean_reversion_signals(
