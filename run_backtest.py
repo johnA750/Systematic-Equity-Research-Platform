@@ -11,13 +11,14 @@ benchmark_ticker = ["SPY"]
 start = "2020-01-01"
 end = "2023-01-01"
 lookback = 20
+top_n = 2
 
 # Strategy universe
 prices = load_price_data(tickers, start, end)
 prices = clean_price_data(prices)
 
 returns = compute_daily_returns(prices)
-signals = generate_momentum_signals(prices, lookback=lookback)
+signals = generate_momentum_signals(prices, lookback=lookback, top_n=top_n)
 
 portfolio_returns = run_backtest(signals, returns)
 strategy_cumulative = compute_cumulative_returns(portfolio_returns)
