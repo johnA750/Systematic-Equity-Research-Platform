@@ -6,12 +6,16 @@ from analytics.performance import compute_cumulative_returns
 from analytics.metrics import compute_performance_metrics
 
 
-tickers = ["AAPL", "MSFT", "AMZN"]
+tickers = [
+    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL",
+    "META", "TSLA", "JPM", "XOM", "UNH",
+    "HD", "PG", "MA", "V", "DIS"
+]
 benchmark_ticker = ["SPY"]
 start = "2020-01-01"
 end = "2023-01-01"
 lookback = 20
-top_n = 2
+top_n = 3
 
 # Strategy universe
 prices = load_price_data(tickers, start, end)
