@@ -75,9 +75,9 @@ momentum_drawdown = compute_drawdown_series(momentum_cumulative)
 # -------- Mean Reversion Strategy --------
 meanrev_weights = generate_mean_reversion_weights(
     prices,
-    lookback=20,
+    lookback=5,
     top_n=TOP_N,
-    rebalance_freq=REBALANCE_FREQ
+    rebalance_freq=5
 )
 
 regime_multiplier_aligned = regime_multiplier.reindex(meanrev_weights.index).fillna(0.0)
@@ -95,8 +95,18 @@ meanrev_metrics = compute_performance_metrics(meanrev_returns)
 meanrev_turnover_metrics = compute_turnover_metrics(meanrev_turnover)
 meanrev_drawdown = compute_drawdown_series(meanrev_cumulative)
 
-# -------- Combined Portfolio --------
-combined_returns = 0.5 * momentum_returns + 0.5 * meanrev_returns
+# -------- Combined Portfolio (inverse-vol weighted) --------
+momentum_vol = momentum_returns.std()
+meanrev_vol = meanrev_returns.std()
+
+inv_vol_mom = 1 / momentum_vol if momentum_vol != 0 else 0
+inv_vol_mr = 1 / meanrev_vol if meanrev_vol != 0 else 0
+
+weight_sum = inv_vol_mom + inv_vol_mr
+mom_weight = inv_vol_mom / weight_sum
+mr_weight = inv_vol_mr / weight_sum
+
+combined_returns = mom_weight * momentum_returns + mr_weight * meanrev_returns
 combined_cumulative = compute_cumulative_returns(combined_returns)
 combined_metrics = compute_performance_metrics(combined_returns)
 combined_drawdown = compute_drawdown_series(combined_cumulative)
@@ -117,6 +127,10 @@ for key, value in meanrev_metrics.items():
 print("\nMean Reversion Turnover Metrics:")
 for key, value in meanrev_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
+
+print("\nCombined Weights:")
+print(f"Momentum Weight: {mom_weight:.4f}")
+print(f"Mean Reversion Weight: {mr_weight:.4f}")
 
 print("\nCombined Strategy Metrics:")
 for key, value in combined_metrics.items():
