@@ -1,7 +1,9 @@
 TICKERS = [
-    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL",
-    "META", "TSLA", "JPM", "XOM", "UNH",
-    "HD", "PG", "MA", "V", "DIS"
+    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "TSLA", "JPM", "XOM", "UNH",
+    "HD", "PG", "MA", "V", "DIS", "BAC", "KO", "PEP", "AVGO", "COST",
+    "ABBV", "MRK", "LLY", "WMT", "MCD", "CVX", "ADBE", "CRM", "ACN", "AMD",
+    "CSCO", "INTC", "QCOM", "TXN", "NFLX", "TMO", "DHR", "LIN", "NEE", "PM",
+    "RTX", "HON", "IBM", "CAT", "GS", "MS", "BLK", "AMGN", "LOW", "INTU"
 ]
 
 BENCHMARK_TICKER = ["SPY"]
