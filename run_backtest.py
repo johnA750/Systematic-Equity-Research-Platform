@@ -21,7 +21,7 @@ end = "2023-01-01"
 
 momentum_lookback = 20
 top_n = 3
-rebalance_freq = 5
+rebalance_freq = 20
 transaction_cost = 0.001
 
 # Load and clean price data
@@ -80,7 +80,7 @@ print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
 # Plot performance
 plt.figure(figsize=(10, 6))
-plt.plot(momentum_cumulative, label="Momentum")
+plt.plot(momentum_cumulative, label="Momentum (Monthly Rebalance)")
 plt.plot(benchmark_cumulative, label="SPY")
 
 plt.title("Momentum vs SPY")
