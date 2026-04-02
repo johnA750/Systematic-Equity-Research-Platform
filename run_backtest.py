@@ -28,7 +28,6 @@ from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
 from portfolio.regime import compute_regime_multiplier
-from portfolio.regime_weighting import compute_regime_weights
 from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
 
 
@@ -143,20 +142,27 @@ combined_turnover = (
 combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 
 # =========================
-# Combined Portfolio - Regime Tilted Experimental
+# Combined Portfolio - Smooth Volatility Weighting (Experimental)
 # =========================
-regime_weights = compute_regime_weights(
-    ma_regime,
-    bull_momentum_weight=0.60,
-    bear_momentum_weight=0.50,
-)
+short_vol = benchmark_returns.rolling(20).std()
+long_vol = benchmark_returns.rolling(100).std()
 
-regime_weights = regime_weights.reindex(momentum_returns.index).ffill().fillna(0.5)
+vol_ratio = short_vol / long_vol
+vol_ratio = vol_ratio.replace([float("inf"), -float("inf")], pd.NA)
+vol_ratio = vol_ratio.bfill().clip(lower=0.5, upper=1.5)
 
-tilt_strength = 0.20
+# Higher vol => reduce momentum a bit
+momentum_weight_series = 0.60 - 0.15 * (vol_ratio - 1.0)
+momentum_weight_series = momentum_weight_series.clip(lower=0.45, upper=0.65)
+meanrev_weight_series = 1.0 - momentum_weight_series
 
-tilted_mom_weight = (1 - tilt_strength) * base_mom_weight + tilt_strength * regime_weights["momentum"]
-tilted_mr_weight = (1 - tilt_strength) * base_mr_weight + tilt_strength * regime_weights["mean_reversion"]
+momentum_weight_series = momentum_weight_series.reindex(momentum_returns.index).ffill().fillna(0.60)
+meanrev_weight_series = meanrev_weight_series.reindex(meanrev_returns.index).ffill().fillna(0.40)
+
+tilt_strength = 0.25
+
+tilted_mom_weight = (1 - tilt_strength) * base_mom_weight + tilt_strength * momentum_weight_series
+tilted_mr_weight = (1 - tilt_strength) * base_mr_weight + tilt_strength * meanrev_weight_series
 
 experimental_combined_returns = (
     tilted_mom_weight * momentum_returns +
@@ -280,19 +286,19 @@ print("\nCombined Strategy CAPM Regression:")
 for key, value in combined_capm_summary.items():
     print(f"{key}: {value:.6f}")
 
-print("\nExperimental Regime-Tilt Last Weights:")
+print("\nExperimental Smooth Vol Weights (Last):")
 print(f"Momentum Weight: {tilted_mom_weight.iloc[-1]:.4f}")
 print(f"Mean Reversion Weight: {tilted_mr_weight.iloc[-1]:.4f}")
 
-print("\nExperimental Regime-Tilt Combined Strategy Metrics:")
+print("\nExperimental Smooth Combined Strategy Metrics:")
 for key, value in experimental_combined_metrics.items():
     print(f"{key}: {value:.4f}")
 
-print("\nExperimental Regime-Tilt Combined Turnover Metrics:")
+print("\nExperimental Smooth Combined Turnover Metrics:")
 for key, value in experimental_combined_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
-print("\nExperimental Regime-Tilt CAPM Regression:")
+print("\nExperimental Smooth CAPM Regression:")
 for key, value in experimental_combined_capm_summary.items():
     print(f"{key}: {value:.6f}")
 
@@ -304,7 +310,7 @@ print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
 print(f"Inverse-Vol Combined: {combined_cumulative.iloc[-1]:.4f}")
-print(f"Experimental Regime-Tilt Combined: {experimental_combined_cumulative.iloc[-1]:.4f}")
+print(f"Experimental Smooth Combined: {experimental_combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
 print_regime_metrics("Momentum MA Regime Analysis", momentum_ma_regime)
@@ -350,8 +356,8 @@ plot_drawdown(combined_drawdown, title="Combined Inverse-Vol Drawdown")
 plot_strategy_vs_benchmark(
     experimental_combined_cumulative,
     benchmark_cumulative.reindex(experimental_combined_cumulative.index),
-    strategy_label="Experimental Regime Tilt",
+    strategy_label="Experimental Smooth Vol",
     benchmark_label="SPY"
 )
 
-plot_drawdown(experimental_combined_drawdown, title="Experimental Regime-Tilt Drawdown")
+plot_drawdown(experimental_combined_drawdown, title="Experimental Smooth Vol Drawdown")
