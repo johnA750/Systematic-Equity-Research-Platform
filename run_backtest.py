@@ -14,9 +14,10 @@ from analytics.returns import compute_daily_returns
 from analytics.performance import compute_cumulative_returns
 from analytics.metrics import compute_performance_metrics
 from analytics.turnover import compute_turnover_metrics
+from analytics.drawdown import compute_drawdown_series
 from strategies.momentum import generate_momentum_weights
 from engine.backtest import run_backtest
-from reporting.plots import plot_strategy_vs_benchmark
+from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
 
 
 # Load and clean price data
@@ -45,6 +46,7 @@ momentum_returns, momentum_turnover = run_backtest(
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
 momentum_metrics = compute_performance_metrics(momentum_returns)
 turnover_metrics = compute_turnover_metrics(momentum_turnover)
+momentum_drawdown = compute_drawdown_series(momentum_cumulative)
 
 # Load benchmark
 benchmark_prices = load_price_data(BENCHMARK_TICKER, START_DATE, END_DATE)
@@ -55,6 +57,7 @@ benchmark_returns = benchmark_returns_df.iloc[:, 0]
 
 benchmark_cumulative = compute_cumulative_returns(benchmark_returns)
 benchmark_metrics = compute_performance_metrics(benchmark_returns)
+benchmark_drawdown = compute_drawdown_series(benchmark_cumulative)
 
 # Print metrics
 print("Momentum Strategy Metrics:")
@@ -80,3 +83,6 @@ plot_strategy_vs_benchmark(
     strategy_label="Momentum",
     benchmark_label="SPY"
 )
+
+plot_drawdown(momentum_drawdown, title="Momentum Drawdown")
+plot_drawdown(benchmark_drawdown, title="SPY Drawdown")
