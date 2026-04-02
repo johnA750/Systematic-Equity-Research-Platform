@@ -120,7 +120,7 @@ momentum_drawdown = compute_drawdown_series(momentum_cumulative)
 meanrev_weights = generate_mean_reversion_weights(
     prices,
     lookback=3,
-    top_n=10,
+    top_n=15,
     rebalance_freq=5,
     trend_window=50,
     zscore_window=20,
