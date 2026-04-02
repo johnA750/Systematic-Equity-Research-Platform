@@ -95,6 +95,12 @@ meanrev_metrics = compute_performance_metrics(meanrev_returns)
 meanrev_turnover_metrics = compute_turnover_metrics(meanrev_turnover)
 meanrev_drawdown = compute_drawdown_series(meanrev_cumulative)
 
+# -------- Combined Portfolio --------
+combined_returns = 0.5 * momentum_returns + 0.5 * meanrev_returns
+combined_cumulative = compute_cumulative_returns(combined_returns)
+combined_metrics = compute_performance_metrics(combined_returns)
+combined_drawdown = compute_drawdown_series(combined_cumulative)
+
 # Print metrics
 print("Momentum Strategy Metrics:")
 for key, value in momentum_metrics.items():
@@ -112,6 +118,10 @@ print("\nMean Reversion Turnover Metrics:")
 for key, value in meanrev_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nCombined Strategy Metrics:")
+for key, value in combined_metrics.items():
+    print(f"{key}: {value:.4f}")
+
 print("\nSPY Benchmark Metrics:")
 for key, value in benchmark_metrics.items():
     print(f"{key}: {value:.4f}")
@@ -119,6 +129,7 @@ for key, value in benchmark_metrics.items():
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
+print(f"Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
 # Plots
@@ -130,7 +141,6 @@ plot_strategy_vs_benchmark(
 )
 
 plot_drawdown(momentum_drawdown, title="Momentum Drawdown")
-plot_drawdown(benchmark_drawdown, title="SPY Drawdown")
 
 plot_strategy_vs_benchmark(
     meanrev_cumulative,
@@ -140,3 +150,12 @@ plot_strategy_vs_benchmark(
 )
 
 plot_drawdown(meanrev_drawdown, title="Mean Reversion Drawdown")
+
+plot_strategy_vs_benchmark(
+    combined_cumulative,
+    benchmark_cumulative,
+    strategy_label="Combined",
+    benchmark_label="SPY"
+)
+
+plot_drawdown(combined_drawdown, title="Combined Drawdown")
