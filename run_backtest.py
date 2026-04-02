@@ -44,6 +44,12 @@ returns = compute_daily_returns(prices)
 # =========================
 # Load benchmark
 # =========================
+# =========================
+# Regime Analysis
+# =========================
+ma_regime = classify_ma_regime(benchmark_price_series, ma_window=200)
+vol_regime = classify_vol_regime(benchmark_returns, vol_window=20, threshold_quantile=0.5)
+
 benchmark_prices_df = load_price_data(BENCHMARK_TICKER, START_DATE, END_DATE)
 benchmark_prices_df = clean_price_data(benchmark_prices_df)
 benchmark_price_series = benchmark_prices_df.iloc[:, 0]
@@ -148,11 +154,6 @@ momentum_capm_summary = summarize_capm_results(momentum_capm)
 meanrev_capm_summary = summarize_capm_results(meanrev_capm)
 combined_capm_summary = summarize_capm_results(combined_capm)
 
-# =========================
-# Regime Analysis
-# =========================
-ma_regime = classify_ma_regime(benchmark_price_series, ma_window=200)
-vol_regime = classify_vol_regime(benchmark_returns, vol_window=20, threshold_quantile=0.5)
 
 momentum_ma_regime = compute_regime_metrics(
     momentum_returns,
