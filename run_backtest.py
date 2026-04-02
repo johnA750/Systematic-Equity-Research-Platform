@@ -4,7 +4,7 @@ from data.loader import load_price_data, clean_price_data
 from analytics.returns import compute_daily_returns
 from analytics.performance import compute_cumulative_returns
 from analytics.metrics import compute_performance_metrics
-from strategies.momentum import generate_momentum_signals
+from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_signals
 from engine.backtest import run_backtest
 
@@ -16,14 +16,13 @@ tickers = [
 ]
 benchmark_ticker = ["SPY"]
 
-transaction_cost = 0.001
-
 start = "2020-01-01"
 end = "2023-01-01"
 
 momentum_lookback = 20
 meanrev_lookback = 5
 top_n = 3
+transaction_cost = 0.001
 
 # Load and clean price data
 prices = load_price_data(tickers, start, end)
@@ -32,12 +31,11 @@ prices = clean_price_data(prices)
 # Compute asset returns
 returns = compute_daily_returns(prices)
 
-# Generate strategy signals
-momentum_signals = generate_momentum_signals(
+# Generate strategy inputs
+momentum_weights = generate_momentum_weights(
     prices,
     lookback=momentum_lookback,
-    top_n=top_n,
-    buffer_n=5
+    top_n=top_n
 )
 
 meanrev_signals = generate_mean_reversion_signals(
@@ -48,7 +46,7 @@ meanrev_signals = generate_mean_reversion_signals(
 
 # Run backtests
 momentum_returns = run_backtest(
-    momentum_signals,
+    momentum_weights,
     returns,
     transaction_cost=transaction_cost
 )
@@ -59,17 +57,17 @@ meanrev_returns = run_backtest(
     transaction_cost=transaction_cost
 )
 
+combined_returns = 0.5 * momentum_returns + 0.5 * meanrev_returns
+
 # Compute cumulative returns
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
 meanrev_cumulative = compute_cumulative_returns(meanrev_returns)
-
-combined_returns = 0.5 * momentum_returns + 0.5 * meanrev_returns
-combined_cumulative = (1 + combined_returns).cumprod()
-combined_metrics = compute_performance_metrics(combined_returns)
+combined_cumulative = compute_cumulative_returns(combined_returns)
 
 # Compute strategy metrics
 momentum_metrics = compute_performance_metrics(momentum_returns)
 meanrev_metrics = compute_performance_metrics(meanrev_returns)
+combined_metrics = compute_performance_metrics(combined_returns)
 
 # Load benchmark
 benchmark_prices = load_price_data(benchmark_ticker, start, end)
@@ -98,12 +96,11 @@ print("\nCombined Strategy Metrics:")
 for key, value in combined_metrics.items():
     print(f"{key}: {value:.4f}")
 
-print(f"Combined: {combined_cumulative.iloc[-1]:.4f}")
-
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
+print(f"Combined: {combined_cumulative.iloc[-1]:.4f}")
 
 # Plot performance
 plt.figure(figsize=(10, 6))

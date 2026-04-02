@@ -1,41 +1,40 @@
 import pandas as pd
 
 
-def generate_momentum_signals(prices, lookback=20, top_n=3, buffer_n=5):
+def generate_momentum_weights(prices, lookback=20, top_n=3):
     """
-    Momentum with buffer to reduce turnover.
+    Generate momentum-based portfolio weights.
 
-    - Enter top_n stocks
-    - Hold stocks as long as they remain in top buffer_n
+    For each day:
+    - compute lookback return for each stock
+    - select the top_n stocks by momentum
+    - assign weights proportional to momentum strength
+    - normalize selected weights to sum to 1
+
+    Parameters:
+        prices (pd.DataFrame): price data
+        lookback (int): momentum lookback window
+        top_n (int): number of stocks to hold
+
+    Returns:
+        pd.DataFrame: portfolio weights by date and ticker
     """
-
     momentum = prices / prices.shift(lookback) - 1
-    signals = pd.DataFrame(0, index=prices.index, columns=prices.columns)
 
-    prev_positions = set()
+    weights = pd.DataFrame(0.0, index=prices.index, columns=prices.columns)
 
     for date in momentum.index:
         daily_momentum = momentum.loc[date].dropna()
 
-        if len(daily_momentum) < buffer_n:
+        if len(daily_momentum) < top_n:
             continue
 
-        ranked = daily_momentum.sort_values(ascending=False)
+        top_stocks = daily_momentum.nlargest(top_n)
 
-        top = set(ranked.head(top_n).index)
-        buffer = set(ranked.head(buffer_n).index)
+        if top_stocks.sum() <= 0:
+            continue
 
-        new_positions = set()
+        normalized_weights = top_stocks / top_stocks.sum()
+        weights.loc[date, normalized_weights.index] = normalized_weights.values
 
-        # Always include top_n
-        new_positions |= top
-
-        # Keep previous positions if still in buffer
-        for stock in prev_positions:
-            if stock in buffer:
-                new_positions.add(stock)
-
-        signals.loc[date, list(new_positions)] = 1
-        prev_positions = new_positions
-
-    return signals
+    return weights
