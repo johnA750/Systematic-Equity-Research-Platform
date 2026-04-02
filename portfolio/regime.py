@@ -19,7 +19,7 @@ def compute_regime_multiplier(benchmark_prices, ma_window=200, sensitivity=5.0):
     trend_strength = trend_strength.fillna(0.0)
 
     # Map trend strength into [0, 1]
-    multiplier = 0.5 + sensitivity * trend_strength
+    multiplier = 0.75 + sensitivity * trend_strength
 
     # Clip to valid exposure range
     multiplier = multiplier.clip(lower=0.0, upper=1.0)
