@@ -75,13 +75,13 @@ momentum_drawdown = compute_drawdown_series(momentum_cumulative)
 # -------- Mean Reversion Strategy --------
 meanrev_weights = generate_mean_reversion_weights(
     prices,
-    lookback=5,
+    lookback=7,
     top_n=TOP_N,
-    rebalance_freq=5
+    rebalance_freq=10
 )
 
-regime_multiplier_aligned = regime_multiplier.reindex(meanrev_weights.index).fillna(0.0)
-meanrev_weights = meanrev_weights.mul(regime_multiplier_aligned, axis=0)
+# regime_multiplier_aligned = regime_multiplier.reindex(meanrev_weights.index).fillna(0.0)
+# meanrev_weights = meanrev_weights.mul(regime_multiplier_aligned, axis=0)
 
 meanrev_returns, meanrev_turnover = run_backtest(
     meanrev_weights,
