@@ -32,7 +32,8 @@ momentum_weights = generate_momentum_weights(
     prices,
     lookback=MOMENTUM_LOOKBACK,
     top_n=TOP_N,
-    rebalance_freq=REBALANCE_FREQ
+    rebalance_freq=REBALANCE_FREQ,
+    vol_lookback=20
 )
 
 # Run momentum backtest
