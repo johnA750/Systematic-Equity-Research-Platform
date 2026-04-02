@@ -24,12 +24,20 @@ from analytics.regime_analysis import (
     compute_regime_metrics,
     print_regime_metrics,
 )
+from analytics.slippage import apply_slippage_to_returns, compute_slippage_cost_series
 from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
 from portfolio.regime import compute_regime_multiplier
 from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
 
+
+# =========================
+# User-set research assumptions
+# =========================
+SLIPPAGE_BPS = 5.0
+CAPM_USE_HAC = True
+CAPM_HAC_LAGS = 5
 
 # =========================
 # Load and clean price data
@@ -83,11 +91,22 @@ momentum_weights = generate_momentum_weights(
 regime_multiplier_aligned = regime_multiplier.reindex(momentum_weights.index).fillna(0.0)
 momentum_weights = momentum_weights.mul(regime_multiplier_aligned, axis=0)
 
-momentum_returns, momentum_turnover = run_backtest(
+momentum_returns_gross, momentum_turnover = run_backtest(
     momentum_weights,
     returns,
     transaction_cost=TRANSACTION_COST,
     return_turnover=True
+)
+
+momentum_returns = apply_slippage_to_returns(
+    momentum_returns_gross,
+    momentum_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+)
+
+momentum_slippage_cost = compute_slippage_cost_series(
+    momentum_turnover,
+    slippage_bps=SLIPPAGE_BPS,
 )
 
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
@@ -105,11 +124,22 @@ meanrev_weights = generate_mean_reversion_weights(
     rebalance_freq=10
 )
 
-meanrev_returns, meanrev_turnover = run_backtest(
+meanrev_returns_gross, meanrev_turnover = run_backtest(
     meanrev_weights,
     returns,
     transaction_cost=TRANSACTION_COST,
     return_turnover=True
+)
+
+meanrev_returns = apply_slippage_to_returns(
+    meanrev_returns_gross,
+    meanrev_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+)
+
+meanrev_slippage_cost = compute_slippage_cost_series(
+    meanrev_turnover,
+    slippage_bps=SLIPPAGE_BPS,
 )
 
 meanrev_cumulative = compute_cumulative_returns(meanrev_returns)
@@ -141,6 +171,11 @@ combined_turnover = (
 )
 combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 
+combined_slippage_cost = compute_slippage_cost_series(
+    combined_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+)
+
 # =========================
 # Combined Portfolio - Smooth Volatility Weighting (Experimental)
 # =========================
@@ -151,7 +186,6 @@ vol_ratio = short_vol / long_vol
 vol_ratio = vol_ratio.replace([float("inf"), -float("inf")], pd.NA)
 vol_ratio = vol_ratio.bfill().clip(lower=0.5, upper=1.5)
 
-# Higher vol => reduce momentum a bit
 momentum_weight_series = 0.60 - 0.15 * (vol_ratio - 1.0)
 momentum_weight_series = momentum_weight_series.clip(lower=0.45, upper=0.65)
 meanrev_weight_series = 1.0 - momentum_weight_series
@@ -179,13 +213,41 @@ experimental_combined_turnover = (
 )
 experimental_combined_turnover_metrics = compute_turnover_metrics(experimental_combined_turnover)
 
+experimental_combined_slippage_cost = compute_slippage_cost_series(
+    experimental_combined_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+)
+
 # =========================
 # CAPM regression
 # =========================
-momentum_capm = run_capm_regression(momentum_returns, benchmark_returns)
-meanrev_capm = run_capm_regression(meanrev_returns, benchmark_returns)
-combined_capm = run_capm_regression(combined_returns, benchmark_returns)
-experimental_combined_capm = run_capm_regression(experimental_combined_returns, benchmark_returns)
+momentum_capm = run_capm_regression(
+    momentum_returns,
+    benchmark_returns,
+    use_hac=CAPM_USE_HAC,
+    hac_lags=CAPM_HAC_LAGS,
+)
+
+meanrev_capm = run_capm_regression(
+    meanrev_returns,
+    benchmark_returns,
+    use_hac=CAPM_USE_HAC,
+    hac_lags=CAPM_HAC_LAGS,
+)
+
+combined_capm = run_capm_regression(
+    combined_returns,
+    benchmark_returns,
+    use_hac=CAPM_USE_HAC,
+    hac_lags=CAPM_HAC_LAGS,
+)
+
+experimental_combined_capm = run_capm_regression(
+    experimental_combined_returns,
+    benchmark_returns,
+    use_hac=CAPM_USE_HAC,
+    hac_lags=CAPM_HAC_LAGS,
+)
 
 momentum_capm_summary = summarize_capm_results(momentum_capm)
 meanrev_capm_summary = summarize_capm_results(meanrev_capm)
@@ -246,7 +308,10 @@ experimental_combined_vol_regime = compute_regime_metrics(
 # =========================
 # Print metrics
 # =========================
-print("Momentum Strategy Metrics:")
+print(f"Assumed Slippage (bps): {SLIPPAGE_BPS:.2f}")
+print(f"CAPM Covariance Type: {'HAC/Newey-West' if CAPM_USE_HAC else 'Nonrobust'}")
+
+print("\nMomentum Strategy Metrics:")
 for key, value in momentum_metrics.items():
     print(f"{key}: {value:.4f}")
 
@@ -254,9 +319,15 @@ print("\nMomentum Turnover Metrics:")
 for key, value in momentum_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nMomentum Average Daily Slippage Cost:")
+print(f"{momentum_slippage_cost.mean():.6f}")
+
 print("\nMomentum CAPM Regression:")
 for key, value in momentum_capm_summary.items():
-    print(f"{key}: {value:.6f}")
+    if isinstance(value, str):
+        print(f"{key}: {value}")
+    else:
+        print(f"{key}: {value:.6f}")
 
 print("\nMean Reversion Strategy Metrics:")
 for key, value in meanrev_metrics.items():
@@ -266,9 +337,15 @@ print("\nMean Reversion Turnover Metrics:")
 for key, value in meanrev_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nMean Reversion Average Daily Slippage Cost:")
+print(f"{meanrev_slippage_cost.mean():.6f}")
+
 print("\nMean Reversion CAPM Regression:")
 for key, value in meanrev_capm_summary.items():
-    print(f"{key}: {value:.6f}")
+    if isinstance(value, str):
+        print(f"{key}: {value}")
+    else:
+        print(f"{key}: {value:.6f}")
 
 print("\nInverse-Vol Combined Weights:")
 print(f"Momentum Weight: {base_mom_weight:.4f}")
@@ -282,9 +359,15 @@ print("\nInverse-Vol Combined Turnover Metrics:")
 for key, value in combined_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nInverse-Vol Combined Average Daily Slippage Cost:")
+print(f"{combined_slippage_cost.mean():.6f}")
+
 print("\nCombined Strategy CAPM Regression:")
 for key, value in combined_capm_summary.items():
-    print(f"{key}: {value:.6f}")
+    if isinstance(value, str):
+        print(f"{key}: {value}")
+    else:
+        print(f"{key}: {value:.6f}")
 
 print("\nExperimental Smooth Vol Weights (Last):")
 print(f"Momentum Weight: {tilted_mom_weight.iloc[-1]:.4f}")
@@ -298,9 +381,15 @@ print("\nExperimental Smooth Combined Turnover Metrics:")
 for key, value in experimental_combined_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
+print("\nExperimental Smooth Combined Average Daily Slippage Cost:")
+print(f"{experimental_combined_slippage_cost.mean():.6f}")
+
 print("\nExperimental Smooth CAPM Regression:")
 for key, value in experimental_combined_capm_summary.items():
-    print(f"{key}: {value:.6f}")
+    if isinstance(value, str):
+        print(f"{key}: {value}")
+    else:
+        print(f"{key}: {value:.6f}")
 
 print("\nSPY Benchmark Metrics:")
 for key, value in benchmark_metrics.items():
@@ -312,6 +401,9 @@ print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
 print(f"Inverse-Vol Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"Experimental Smooth Combined: {experimental_combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
+
+print("\nCombined CAPM Full Summary:")
+print(combined_capm["model_summary"])
 
 print_regime_metrics("Momentum MA Regime Analysis", momentum_ma_regime)
 print_regime_metrics("Mean Reversion MA Regime Analysis", meanrev_ma_regime)
