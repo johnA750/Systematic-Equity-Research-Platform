@@ -19,27 +19,22 @@ from config.config import (
     TRANSACTION_COST,
 )
 
-# =========================
-# SETTINGS
-# =========================
 SLIPPAGE_BPS = 5.0
 
-LOOKBACKS = [3, 5, 7, 10, 15]
+LOOKBACKS = [2, 3, 5]
 TOP_NS = [5, 10, 15, 20]
-REBALANCE_FREQS = [2, 5, 10, 21]
+REBALANCE_FREQS = [2, 5, 10]
 TREND_WINDOWS = [20, 50, 100]
+ZSCORE_WINDOWS = [10, 20, 30]
+MIN_ZSCORES = [0.5, 1.0, 1.5]
+USE_TREND_FILTERS = [True]
+USE_POSITIVE_REVERSAL_FILTERS = [False, True]
+WEIGHTING_SCHEMES = ["zscore", "equal", "hybrid"]
 
-# =========================
-# Load data once
-# =========================
 prices = load_price_data(TICKERS, START_DATE, END_DATE)
 prices = clean_price_data(prices)
-
 returns = compute_daily_returns(prices)
 
-# =========================
-# Run grid search
-# =========================
 results = []
 
 param_grid = list(itertools.product(
@@ -47,11 +42,26 @@ param_grid = list(itertools.product(
     TOP_NS,
     REBALANCE_FREQS,
     TREND_WINDOWS,
+    ZSCORE_WINDOWS,
+    MIN_ZSCORES,
+    USE_TREND_FILTERS,
+    USE_POSITIVE_REVERSAL_FILTERS,
+    WEIGHTING_SCHEMES,
 ))
 
-print(f"Running {len(param_grid)} mean reversion configurations...\n")
+print(f"Running {len(param_grid)} upgraded mean reversion configurations...\n")
 
-for idx, (lookback, top_n, rebalance_freq, trend_window) in enumerate(param_grid):
+for idx, (
+    lookback,
+    top_n,
+    rebalance_freq,
+    trend_window,
+    zscore_window,
+    min_zscore,
+    use_trend_filter,
+    use_positive_reversal_filter,
+    weighting_scheme,
+) in enumerate(param_grid):
     try:
         weights = generate_mean_reversion_weights(
             prices,
@@ -59,6 +69,11 @@ for idx, (lookback, top_n, rebalance_freq, trend_window) in enumerate(param_grid
             top_n=top_n,
             rebalance_freq=rebalance_freq,
             trend_window=trend_window,
+            zscore_window=zscore_window,
+            min_zscore=min_zscore,
+            use_trend_filter=use_trend_filter,
+            use_positive_reversal_filter=use_positive_reversal_filter,
+            weighting_scheme=weighting_scheme,
         )
 
         gross_returns, turnover = run_backtest(
@@ -82,6 +97,11 @@ for idx, (lookback, top_n, rebalance_freq, trend_window) in enumerate(param_grid
             "top_n": top_n,
             "rebalance_freq": rebalance_freq,
             "trend_window": trend_window,
+            "zscore_window": zscore_window,
+            "min_zscore": min_zscore,
+            "use_trend_filter": use_trend_filter,
+            "use_positive_reversal_filter": use_positive_reversal_filter,
+            "weighting_scheme": weighting_scheme,
             "return": metrics["Annualized Return"],
             "sharpe": metrics["Sharpe Ratio"],
             "vol": metrics["Volatility"],
@@ -91,29 +111,24 @@ for idx, (lookback, top_n, rebalance_freq, trend_window) in enumerate(param_grid
 
         print(
             f"[{idx+1}/{len(param_grid)}] Done: "
-            f"L={lookback}, N={top_n}, R={rebalance_freq}, T={trend_window}"
+            f"L={lookback}, N={top_n}, R={rebalance_freq}, "
+            f"T={trend_window}, ZW={zscore_window}, MZ={min_zscore}, "
+            f"PRF={use_positive_reversal_filter}, W={weighting_scheme}"
         )
 
     except Exception as e:
         print(
-            f"Failed: L={lookback}, N={top_n}, "
-            f"R={rebalance_freq}, T={trend_window}"
+            f"Failed: L={lookback}, N={top_n}, R={rebalance_freq}, "
+            f"T={trend_window}, ZW={zscore_window}, MZ={min_zscore}, "
+            f"PRF={use_positive_reversal_filter}, W={weighting_scheme}"
         )
         print(e)
 
-# =========================
-# Results dataframe
-# =========================
 results_df = pd.DataFrame(results)
-
 results_df = results_df.sort_values(by="sharpe", ascending=False)
 
 print("\n================ BEST CONFIGS ==================\n")
-print(results_df.head(15))
+print(results_df.head(20))
 
-# =========================
-# Save results
-# =========================
-results_df.to_csv("mean_reversion_tuning_results.csv", index=False)
-
-print("\nSaved results to mean_reversion_tuning_results.csv")
+results_df.to_csv("mean_reversion_tuning_results_upgraded.csv", index=False)
+print("\nSaved results to mean_reversion_tuning_results_upgraded.csv")
