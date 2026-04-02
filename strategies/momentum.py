@@ -1,40 +1,42 @@
 import pandas as pd
 
 
-def generate_momentum_weights(prices, lookback=20, top_n=3):
+def generate_momentum_weights(prices, lookback=20, top_n=3, rebalance_freq=5):
     """
-    Generate momentum-based portfolio weights.
+    Generate long-only momentum portfolio weights.
 
-    For each day:
-    - compute lookback return for each stock
-    - select the top_n stocks by momentum
-    - assign weights proportional to momentum strength
-    - normalize selected weights to sum to 1
-
-    Parameters:
-        prices (pd.DataFrame): price data
-        lookback (int): momentum lookback window
-        top_n (int): number of stocks to hold
-
-    Returns:
-        pd.DataFrame: portfolio weights by date and ticker
+    Rules:
+    - compute lookback momentum
+    - only consider stocks with positive momentum
+    - select up to top_n positive-momentum stocks
+    - weight proportional to momentum strength
+    - rebalance every rebalance_freq days
     """
+
     momentum = prices / prices.shift(lookback) - 1
-
     weights = pd.DataFrame(0.0, index=prices.index, columns=prices.columns)
 
-    for date in momentum.index:
-        daily_momentum = momentum.loc[date].dropna()
+    last_weights = pd.Series(0.0, index=prices.columns)
 
-        if len(daily_momentum) < top_n:
-            continue
+    for i, date in enumerate(momentum.index):
+        daily = momentum.loc[date].dropna()
 
-        top_stocks = daily_momentum.nlargest(top_n)
+        if i % rebalance_freq == 0:
+            positive = daily[daily > 0]
 
-        if top_stocks.sum() <= 0:
-            continue
+            if len(positive) == 0:
+                last_weights = pd.Series(0.0, index=prices.columns)
+            else:
+                top = positive.nlargest(min(top_n, len(positive)))
 
-        normalized_weights = top_stocks / top_stocks.sum()
-        weights.loc[date, normalized_weights.index] = normalized_weights.values
+                new_weights = pd.Series(0.0, index=prices.columns)
+                new_weights.loc[top.index] = top.values
+
+                if new_weights.sum() > 0:
+                    new_weights = new_weights / new_weights.sum()
+
+                last_weights = new_weights
+
+        weights.loc[date] = last_weights
 
     return weights
