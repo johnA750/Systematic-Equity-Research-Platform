@@ -18,6 +18,12 @@ from analytics.metrics import compute_performance_metrics
 from analytics.turnover import compute_turnover_metrics
 from analytics.drawdown import compute_drawdown_series
 from analytics.factor_regression import run_capm_regression, summarize_capm_results
+from analytics.regime_analysis import (
+    classify_ma_regime,
+    classify_vol_regime,
+    compute_regime_metrics,
+    print_regime_metrics,
+)
 from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
@@ -141,6 +147,48 @@ meanrev_capm_summary = summarize_capm_results(meanrev_capm)
 combined_capm_summary = summarize_capm_results(combined_capm)
 
 # =========================
+# Regime Analysis
+# =========================
+ma_regime = classify_ma_regime(benchmark_price_series, ma_window=200)
+vol_regime = classify_vol_regime(benchmark_returns, vol_window=20, threshold_quantile=0.5)
+
+momentum_ma_regime = compute_regime_metrics(
+    momentum_returns,
+    ma_regime,
+    momentum_turnover,
+)
+
+meanrev_ma_regime = compute_regime_metrics(
+    meanrev_returns,
+    ma_regime,
+    meanrev_turnover,
+)
+
+combined_ma_regime = compute_regime_metrics(
+    combined_returns,
+    ma_regime,
+    combined_turnover,
+)
+
+momentum_vol_regime = compute_regime_metrics(
+    momentum_returns,
+    vol_regime,
+    momentum_turnover,
+)
+
+meanrev_vol_regime = compute_regime_metrics(
+    meanrev_returns,
+    vol_regime,
+    meanrev_turnover,
+)
+
+combined_vol_regime = compute_regime_metrics(
+    combined_returns,
+    vol_regime,
+    combined_turnover,
+)
+
+# =========================
 # Print metrics
 # =========================
 print("Momentum Strategy Metrics:")
@@ -193,9 +241,16 @@ print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
 print(f"Inverse-Vol Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
-# Optional full regression summary
 print("\nCombined CAPM Full Summary:")
 print(combined_capm["model_summary"])
+
+print_regime_metrics("Momentum MA Regime Analysis", momentum_ma_regime)
+print_regime_metrics("Mean Reversion MA Regime Analysis", meanrev_ma_regime)
+print_regime_metrics("Combined MA Regime Analysis", combined_ma_regime)
+
+print_regime_metrics("Momentum Volatility Regime Analysis", momentum_vol_regime)
+print_regime_metrics("Mean Reversion Volatility Regime Analysis", meanrev_vol_regime)
+print_regime_metrics("Combined Volatility Regime Analysis", combined_vol_regime)
 
 # =========================
 # Plots
