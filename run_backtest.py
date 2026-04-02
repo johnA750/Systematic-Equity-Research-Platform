@@ -38,20 +38,14 @@ from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
 prices = load_price_data(TICKERS, START_DATE, END_DATE)
 prices = clean_price_data(prices)
 
-# Compute asset returns
 returns = compute_daily_returns(prices)
 
 # =========================
 # Load benchmark
 # =========================
-# =========================
-# Regime Analysis
-# =========================
-ma_regime = classify_ma_regime(benchmark_price_series, ma_window=200)
-vol_regime = classify_vol_regime(benchmark_returns, vol_window=20, threshold_quantile=0.5)
-
 benchmark_prices_df = load_price_data(BENCHMARK_TICKER, START_DATE, END_DATE)
 benchmark_prices_df = clean_price_data(benchmark_prices_df)
+
 benchmark_price_series = benchmark_prices_df.iloc[:, 0]
 
 benchmark_returns_df = compute_daily_returns(benchmark_prices_df)
@@ -62,7 +56,13 @@ benchmark_metrics = compute_performance_metrics(benchmark_returns)
 benchmark_drawdown = compute_drawdown_series(benchmark_cumulative)
 
 # =========================
-# Compute regime multiplier
+# Regime Classification (MUST BE HERE)
+# =========================
+ma_regime = classify_ma_regime(benchmark_price_series, ma_window=200)
+vol_regime = classify_vol_regime(benchmark_returns, vol_window=20, threshold_quantile=0.5)
+
+# =========================
+# Regime Multiplier (for momentum)
 # =========================
 regime_multiplier = compute_regime_multiplier(
     benchmark_price_series,
@@ -119,7 +119,7 @@ meanrev_turnover_metrics = compute_turnover_metrics(meanrev_turnover)
 meanrev_drawdown = compute_drawdown_series(meanrev_cumulative)
 
 # =========================
-# Combined Portfolio - Regime Weighted
+# Combined Portfolio - REGIME WEIGHTED
 # =========================
 regime_weights = compute_regime_weights(
     ma_regime,
@@ -133,6 +133,7 @@ combined_returns = (
     regime_weights["momentum"] * momentum_returns +
     regime_weights["mean_reversion"] * meanrev_returns
 )
+
 combined_cumulative = compute_cumulative_returns(combined_returns)
 combined_metrics = compute_performance_metrics(combined_returns)
 combined_drawdown = compute_drawdown_series(combined_cumulative)
@@ -141,10 +142,11 @@ combined_turnover = (
     regime_weights["momentum"] * momentum_turnover.reindex(combined_returns.index).fillna(0.0)
     + regime_weights["mean_reversion"] * meanrev_turnover.reindex(combined_returns.index).fillna(0.0)
 )
+
 combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 
 # =========================
-# CAPM Regressions
+# CAPM Regression
 # =========================
 momentum_capm = run_capm_regression(momentum_returns, benchmark_returns)
 meanrev_capm = run_capm_regression(meanrev_returns, benchmark_returns)
@@ -154,35 +156,13 @@ momentum_capm_summary = summarize_capm_results(momentum_capm)
 meanrev_capm_summary = summarize_capm_results(meanrev_capm)
 combined_capm_summary = summarize_capm_results(combined_capm)
 
-
-momentum_ma_regime = compute_regime_metrics(
-    momentum_returns,
-    ma_regime,
-    momentum_turnover,
-)
-
-meanrev_ma_regime = compute_regime_metrics(
-    meanrev_returns,
-    ma_regime,
-    meanrev_turnover,
-)
-
+# =========================
+# Regime Analysis
+# =========================
 combined_ma_regime = compute_regime_metrics(
     combined_returns,
     ma_regime,
     combined_turnover,
-)
-
-momentum_vol_regime = compute_regime_metrics(
-    momentum_returns,
-    vol_regime,
-    momentum_turnover,
-)
-
-meanrev_vol_regime = compute_regime_metrics(
-    meanrev_returns,
-    vol_regime,
-    meanrev_turnover,
 )
 
 combined_vol_regime = compute_regime_metrics(
@@ -192,35 +172,8 @@ combined_vol_regime = compute_regime_metrics(
 )
 
 # =========================
-# Print metrics
+# PRINTS
 # =========================
-print("Momentum Strategy Metrics:")
-for key, value in momentum_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nMomentum Turnover Metrics:")
-for key, value in momentum_turnover_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nMomentum CAPM Regression:")
-for key, value in momentum_capm_summary.items():
-    print(f"{key}: {value:.6f}")
-
-print("\nMean Reversion Strategy Metrics:")
-for key, value in meanrev_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nMean Reversion Turnover Metrics:")
-for key, value in meanrev_turnover_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nMean Reversion CAPM Regression:")
-for key, value in meanrev_capm_summary.items():
-    print(f"{key}: {value:.6f}")
-
-print("\nLast Regime Weights:")
-print(regime_weights.iloc[-1])
-
 print("\nRegime-Weighted Combined Strategy Metrics:")
 for key, value in combined_metrics.items():
     print(f"{key}: {value:.4f}")
@@ -228,6 +181,9 @@ for key, value in combined_metrics.items():
 print("\nRegime-Weighted Combined Turnover Metrics:")
 for key, value in combined_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
+
+print("\nLast Regime Weights:")
+print(regime_weights.iloc[-1])
 
 print("\nCombined Strategy CAPM Regression:")
 for key, value in combined_capm_summary.items():
@@ -238,48 +194,20 @@ for key, value in benchmark_metrics.items():
     print(f"{key}: {value:.4f}")
 
 print("\nFinal Cumulative Values:")
-print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
-print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
 print(f"Regime-Weighted Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
-print("\nCombined CAPM Full Summary:")
-print(combined_capm["model_summary"])
-
-print_regime_metrics("Momentum MA Regime Analysis", momentum_ma_regime)
-print_regime_metrics("Mean Reversion MA Regime Analysis", meanrev_ma_regime)
 print_regime_metrics("Combined MA Regime Analysis", combined_ma_regime)
-
-print_regime_metrics("Momentum Volatility Regime Analysis", momentum_vol_regime)
-print_regime_metrics("Mean Reversion Volatility Regime Analysis", meanrev_vol_regime)
 print_regime_metrics("Combined Volatility Regime Analysis", combined_vol_regime)
 
 # =========================
 # Plots
 # =========================
 plot_strategy_vs_benchmark(
-    momentum_cumulative,
-    benchmark_cumulative.reindex(momentum_cumulative.index),
-    strategy_label="Momentum",
-    benchmark_label="SPY"
-)
-
-plot_drawdown(momentum_drawdown, title="Momentum Drawdown")
-
-plot_strategy_vs_benchmark(
-    meanrev_cumulative,
-    benchmark_cumulative.reindex(meanrev_cumulative.index),
-    strategy_label="Mean Reversion",
-    benchmark_label="SPY"
-)
-
-plot_drawdown(meanrev_drawdown, title="Mean Reversion Drawdown")
-
-plot_strategy_vs_benchmark(
     combined_cumulative,
     benchmark_cumulative.reindex(combined_cumulative.index),
-    strategy_label="Combined Inverse-Vol",
+    strategy_label="Regime Weighted",
     benchmark_label="SPY"
 )
 
-plot_drawdown(combined_drawdown, title="Combined Inverse-Vol Drawdown")
+plot_drawdown(combined_drawdown, title="Regime Weighted Drawdown")
