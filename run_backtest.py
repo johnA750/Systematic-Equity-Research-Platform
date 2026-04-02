@@ -119,15 +119,13 @@ momentum_drawdown = compute_drawdown_series(momentum_cumulative)
 # =========================
 meanrev_weights = generate_mean_reversion_weights(
     prices,
-    lookback=3,
+    lookback=5,
     top_n=15,
-    rebalance_freq=5,
-    trend_window=50,
-    zscore_window=20,
-    min_zscore=1.0,
-    use_trend_filter=True,
-    use_positive_reversal_filter=False,
-    weighting_scheme="zscore",
+    rebalance_freq=10,
+    trend_window=40,
+    min_pullback=-0.10,
+    max_pullback=-0.03,
+    weighting_scheme="equal",
 )
 
 meanrev_returns_gross, meanrev_turnover = run_backtest(
