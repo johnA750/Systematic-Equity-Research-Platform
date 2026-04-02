@@ -15,3 +15,13 @@ MOMENTUM_LOOKBACK = 20
 TOP_N = 10
 REBALANCE_FREQ = 20
 TRANSACTION_COST = 0.001
+
+OPTIMIZATION_CONFIG = {
+    "enabled": True,
+    "train_fraction": 0.7,
+    "turnover_penalty_strength": 0.0,
+    "weight_bounds": {
+        "momentum": (0.0, 1.0),
+        "mean_reversion": (0.0, 1.0),
+    },
+}
