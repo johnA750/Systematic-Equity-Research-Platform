@@ -28,6 +28,7 @@ from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
 from portfolio.regime import compute_regime_multiplier
+from portfolio.regime_weighting import compute_regime_weights
 from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
 
 
@@ -112,26 +113,27 @@ meanrev_turnover_metrics = compute_turnover_metrics(meanrev_turnover)
 meanrev_drawdown = compute_drawdown_series(meanrev_cumulative)
 
 # =========================
-# Combined Portfolio - Inverse Vol
+# Combined Portfolio - Regime Weighted
 # =========================
-momentum_vol = momentum_returns.std()
-meanrev_vol = meanrev_returns.std()
+regime_weights = compute_regime_weights(
+    ma_regime,
+    bull_momentum_weight=0.7,
+    bear_momentum_weight=0.3,
+)
 
-inv_vol_mom = 1 / momentum_vol if momentum_vol != 0 else 0
-inv_vol_mr = 1 / meanrev_vol if meanrev_vol != 0 else 0
+regime_weights = regime_weights.reindex(momentum_returns.index).ffill()
 
-weight_sum = inv_vol_mom + inv_vol_mr
-mom_weight = inv_vol_mom / weight_sum if weight_sum != 0 else 0.5
-mr_weight = inv_vol_mr / weight_sum if weight_sum != 0 else 0.5
-
-combined_returns = mom_weight * momentum_returns + mr_weight * meanrev_returns
+combined_returns = (
+    regime_weights["momentum"] * momentum_returns +
+    regime_weights["mean_reversion"] * meanrev_returns
+)
 combined_cumulative = compute_cumulative_returns(combined_returns)
 combined_metrics = compute_performance_metrics(combined_returns)
 combined_drawdown = compute_drawdown_series(combined_cumulative)
 
 combined_turnover = (
-    mom_weight * momentum_turnover.reindex(combined_returns.index).fillna(0.0)
-    + mr_weight * meanrev_turnover.reindex(combined_returns.index).fillna(0.0)
+    regime_weights["momentum"] * momentum_turnover.reindex(combined_returns.index).fillna(0.0)
+    + regime_weights["mean_reversion"] * meanrev_turnover.reindex(combined_returns.index).fillna(0.0)
 )
 combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 
@@ -215,15 +217,14 @@ print("\nMean Reversion CAPM Regression:")
 for key, value in meanrev_capm_summary.items():
     print(f"{key}: {value:.6f}")
 
-print("\nInverse-Vol Combined Weights:")
-print(f"Momentum Weight: {mom_weight:.4f}")
-print(f"Mean Reversion Weight: {mr_weight:.4f}")
+print("\nLast Regime Weights:")
+print(regime_weights.iloc[-1])
 
-print("\nInverse-Vol Combined Strategy Metrics:")
+print("\nRegime-Weighted Combined Strategy Metrics:")
 for key, value in combined_metrics.items():
     print(f"{key}: {value:.4f}")
 
-print("\nInverse-Vol Combined Turnover Metrics:")
+print("\nRegime-Weighted Combined Turnover Metrics:")
 for key, value in combined_turnover_metrics.items():
     print(f"{key}: {value:.4f}")
 
@@ -238,7 +239,7 @@ for key, value in benchmark_metrics.items():
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
-print(f"Inverse-Vol Combined: {combined_cumulative.iloc[-1]:.4f}")
+print(f"Regime-Weighted Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
 print("\nCombined CAPM Full Summary:")
