@@ -54,6 +54,15 @@ SAVE_PLOTS = True
 SAVE_INDIVIDUAL_PLOTS = False
 VERBOSE_ANALYTICS = False
 
+# Optional Ken French factor decomposition used for reporting only.
+ENABLE_FACTOR_ANALYSIS = True
+FACTOR_FREQUENCY = "daily"
+ENABLE_FF5_ANALYSIS = False
+FACTOR_ROLLING_MODEL = "ff3"
+FACTOR_ROLLING_WINDOW = 126
+FACTOR_USE_HAC = True
+FACTOR_HAC_LAGS = 5
+
 # Walk-forward research settings. These are used only by
 # research/run_walk_forward.py; the production full-sample runner is unchanged.
 WALK_FORWARD_MODE = "rolling"

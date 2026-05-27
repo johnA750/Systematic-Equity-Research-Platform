@@ -33,6 +33,13 @@ from config.config import (
     SAVE_PLOTS,
     SAVE_INDIVIDUAL_PLOTS,
     VERBOSE_ANALYTICS,
+    ENABLE_FACTOR_ANALYSIS,
+    FACTOR_FREQUENCY,
+    ENABLE_FF5_ANALYSIS,
+    FACTOR_ROLLING_MODEL,
+    FACTOR_ROLLING_WINDOW,
+    FACTOR_USE_HAC,
+    FACTOR_HAC_LAGS,
 )
 
 from data.loader import load_market_data, load_price_data, clean_price_data
@@ -44,6 +51,7 @@ from analytics.metrics import compute_performance_metrics
 from analytics.turnover import compute_turnover_metrics
 from analytics.drawdown import compute_drawdown_series
 from analytics.factor_regression import run_capm_regression, summarize_capm_results
+from analytics.factors import run_factor_model_suite, compute_rolling_factor_exposures
 from analytics.exposure import (
     compute_gross_exposure,
     summarize_gross_exposure,
@@ -67,6 +75,7 @@ from reporting.plots import (
     plot_strategy_vs_benchmark,
     plot_drawdown,
     plot_gross_exposure,
+    plot_rolling_factor_exposures,
 )
 from reporting.experiments import (
     create_experiment_directory,
@@ -364,6 +373,39 @@ combined_capm_summary = summarize_capm_results(combined_capm)
 vol_targeted_capm_summary = summarize_capm_results(vol_targeted_capm)
 
 # =========================
+# Optional Ken French factor decomposition
+# =========================
+factor_summary = pd.DataFrame()
+rolling_factor_exposures = pd.DataFrame()
+factor_analysis_error = None
+if ENABLE_FACTOR_ANALYSIS:
+    try:
+        factor_summary, factor_data = run_factor_model_suite(
+            {
+                "combined_inverse_vol": combined_returns,
+                "combined_vol_targeted": vol_targeted_returns,
+            },
+            frequency=FACTOR_FREQUENCY,
+            include_ff5=ENABLE_FF5_ANALYSIS,
+            use_hac=FACTOR_USE_HAC,
+            hac_lags=FACTOR_HAC_LAGS,
+            start_date=START_DATE,
+            end_date=END_DATE,
+        )
+        rolling_dataset = "ff5" if FACTOR_ROLLING_MODEL == "ff5" else "ff3"
+        rolling_factor_exposures = compute_rolling_factor_exposures(
+            combined_returns,
+            factor_data[rolling_dataset],
+            model=FACTOR_ROLLING_MODEL,
+            frequency=FACTOR_FREQUENCY,
+            window=FACTOR_ROLLING_WINDOW,
+            use_hac=FACTOR_USE_HAC,
+            hac_lags=FACTOR_HAC_LAGS,
+        )
+    except Exception as exc:
+        factor_analysis_error = str(exc)
+
+# =========================
 # Regime analysis
 # =========================
 combined_ma_regime = compute_regime_metrics(
@@ -402,6 +444,19 @@ print("\nCore CAPM Summary:")
 print(f"Inverse-Vol Alpha Annualized: {combined_capm_summary['Alpha Annualized']:.6f}")
 print(f"Inverse-Vol Beta: {combined_capm_summary['Beta']:.6f}")
 print(f"Inverse-Vol Alpha p-value: {combined_capm_summary['Alpha p-value']:.6f}")
+
+if not factor_summary.empty:
+    ff3_primary = factor_summary[
+        (factor_summary["portfolio"] == "combined_inverse_vol")
+        & (factor_summary["model"] == "FF3")
+    ].iloc[0]
+    print("\nCore Fama-French 3-Factor Summary:")
+    print(f"Alpha Annualized: {ff3_primary['alpha_annualized']:.6f}")
+    print(f"Market Beta: {ff3_primary['market_beta']:.6f}")
+    print(f"SMB Exposure: {ff3_primary['smb']:.6f}")
+    print(f"HML Exposure: {ff3_primary['hml']:.6f}")
+elif factor_analysis_error:
+    print(f"\nFactor analysis unavailable: {factor_analysis_error}")
 
 if VERBOSE:
     print("\nMomentum Strategy Metrics:")
@@ -446,6 +501,10 @@ if VERBOSE:
             print(f"{key}: {value}")
         else:
             print(f"{key}: {value:.6f}")
+
+    if not factor_summary.empty:
+        print("\nKen French Factor Decomposition:")
+        print(factor_summary.to_string(index=False, float_format=lambda value: f"{value:.6f}"))
 
     print("\nMomentum Turnover Metrics:")
     for key, value in momentum_turnover_metrics.items():
@@ -544,6 +603,12 @@ if SAVE_INDIVIDUAL_PLOTS:
         label="Vol-Targeted Combined",
     )
 
+if not rolling_factor_exposures.empty:
+    figures["rolling_factor_exposures"] = plot_rolling_factor_exposures(
+        rolling_factor_exposures,
+        title_prefix="Combined Inverse-Vol",
+    )
+
 if SAVE_REPORTS:
     report_directory, timestamp = create_experiment_directory(REPORT_ROOT, ACTIVE_MODE.name)
     metric_rows = []
@@ -584,6 +649,9 @@ if SAVE_REPORTS:
     if not combined_sector_exposure.empty:
         tables["combined_inverse_vol_sector_exposure"] = combined_sector_exposure.reset_index(names="sector")
         tables["combined_vol_targeted_sector_exposure"] = vol_targeted_sector_exposure.reset_index(names="sector")
+    if not factor_summary.empty:
+        tables["factor_summary"] = factor_summary
+        tables["rolling_factor_exposures"] = rolling_factor_exposures
     save_tables(report_directory, tables)
     if SAVE_PLOTS:
         save_figures(report_directory, figures)
@@ -605,6 +673,9 @@ if SAVE_REPORTS:
             "slippage_bps": SLIPPAGE_BPS,
             "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
             "max_position_weight": MAX_POSITION_WEIGHT,
+            "factor_analysis_enabled": ENABLE_FACTOR_ANALYSIS,
+            "factor_frequency": FACTOR_FREQUENCY,
+            "ff5_analysis_enabled": ENABLE_FF5_ANALYSIS,
         },
         {
             "momentum_lookback": MOMENTUM_LOOKBACK,
@@ -614,6 +685,8 @@ if SAVE_REPORTS:
             "max_missing_data_fraction": MAX_MISSING_DATA_FRACTION,
             "adv_lookback_window": ADV_LOOKBACK_WINDOW,
             "min_average_dollar_volume": MIN_AVERAGE_DOLLAR_VOLUME,
+            "factor_rolling_model": FACTOR_ROLLING_MODEL,
+            "factor_rolling_window": FACTOR_ROLLING_WINDOW,
         },
     )
     print(f"\nReport saved: {report_directory}")

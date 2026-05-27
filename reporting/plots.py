@@ -130,3 +130,26 @@ def plot_rolling_performance(rolling_metrics, title_prefix="Out-of-Sample"):
 
     fig.tight_layout()
     return fig
+
+
+def plot_rolling_factor_exposures(rolling_exposures, title_prefix="Portfolio"):
+    """Plot rolling Ken French alpha and factor loadings."""
+    columns = [
+        ("alpha_annualized", "Rolling Alpha (Annualized)"),
+        ("market_beta", "Rolling Market Beta"),
+        ("smb", "Rolling SMB Exposure"),
+        ("hml", "Rolling HML Exposure"),
+    ]
+    available = [(column, label) for column, label in columns if column in rolling_exposures]
+    if not available:
+        raise ValueError("No supported rolling factor exposure columns were supplied.")
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9), sharex=True)
+    for axis, (column, label) in zip(axes.flat, available):
+        axis.plot(rolling_exposures.index, rolling_exposures[column])
+        axis.set_title(f"{title_prefix} {label}")
+        axis.grid(True)
+    for axis in axes.flat[len(available):]:
+        axis.axis("off")
+    fig.tight_layout()
+    return fig

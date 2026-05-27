@@ -7,6 +7,7 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.rolling import compute_rolling_performance
+from analytics.factors import run_factor_model_suite, compute_rolling_factor_exposures
 from config.modes import WALK_FORWARD_VALIDATION
 from config.config import (
     TICKERS,
@@ -40,12 +41,19 @@ from config.config import (
     SAVE_REPORTS,
     SAVE_PLOTS,
     VERBOSE_ANALYTICS,
+    ENABLE_FACTOR_ANALYSIS,
+    FACTOR_FREQUENCY,
+    ENABLE_FF5_ANALYSIS,
+    FACTOR_ROLLING_MODEL,
+    FACTOR_ROLLING_WINDOW,
+    FACTOR_USE_HAC,
+    FACTOR_HAC_LAGS,
 )
 from data.liquidity import build_liquidity_eligibility_mask
 from data.loader import clean_price_data, load_market_data, load_price_data
 from data.sp500 import get_sp500_constituents
 from analytics.returns import compute_daily_returns
-from reporting.plots import plot_rolling_performance
+from reporting.plots import plot_rolling_factor_exposures, plot_rolling_performance
 from reporting.experiments import (
     create_experiment_directory,
     save_figures,
@@ -194,6 +202,54 @@ def main():
     results["rolling_metrics"] = selected_rolling_metrics
     results["fixed_rolling_metrics"] = fixed_rolling_metrics
 
+    factor_summary = pd.DataFrame()
+    rolling_factor_exposures = pd.DataFrame()
+    factor_analysis_error = None
+    if ENABLE_FACTOR_ANALYSIS:
+        try:
+            factor_summary, factor_data = run_factor_model_suite(
+                {
+                    "selected_parameters_oos": results["oos_returns"],
+                    "fixed_production_oos": results["fixed_oos_returns"],
+                },
+                frequency=FACTOR_FREQUENCY,
+                include_ff5=ENABLE_FF5_ANALYSIS,
+                use_hac=FACTOR_USE_HAC,
+                hac_lags=FACTOR_HAC_LAGS,
+                start_date=START_DATE,
+                end_date=END_DATE,
+            )
+            rolling_dataset = "ff5" if FACTOR_ROLLING_MODEL == "ff5" else "ff3"
+            selected_factor_rolling = compute_rolling_factor_exposures(
+                results["oos_returns"],
+                factor_data[rolling_dataset],
+                model=FACTOR_ROLLING_MODEL,
+                frequency=FACTOR_FREQUENCY,
+                window=FACTOR_ROLLING_WINDOW,
+                use_hac=FACTOR_USE_HAC,
+                hac_lags=FACTOR_HAC_LAGS,
+            )
+            fixed_factor_rolling = compute_rolling_factor_exposures(
+                results["fixed_oos_returns"],
+                factor_data[rolling_dataset],
+                model=FACTOR_ROLLING_MODEL,
+                frequency=FACTOR_FREQUENCY,
+                window=FACTOR_ROLLING_WINDOW,
+                use_hac=FACTOR_USE_HAC,
+                hac_lags=FACTOR_HAC_LAGS,
+            )
+            rolling_factor_exposures = pd.concat(
+                {
+                    "selected_parameters_oos": selected_factor_rolling,
+                    "fixed_production_oos": fixed_factor_rolling,
+                },
+                names=["path", "date"],
+            ).reset_index()
+            results["factor_summary"] = factor_summary
+            results["rolling_factor_exposures"] = rolling_factor_exposures
+        except Exception as exc:
+            factor_analysis_error = str(exc)
+
     selected_columns = [
         "window_id",
         "parameter_id",
@@ -215,6 +271,14 @@ def main():
     print("\nSelected vs Fixed Production OOS Comparison:")
     print(results["path_comparison"].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
+    if not factor_summary.empty:
+        print("\nFama-French 3-Factor OOS Summary:")
+        ff3 = factor_summary[factor_summary["model"] == "FF3"]
+        columns = ["portfolio", "alpha_annualized", "market_beta", "smb", "hml"]
+        print(ff3[columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+    elif factor_analysis_error:
+        print(f"\nFactor analysis unavailable: {factor_analysis_error}")
+
     print("\nBest Parameter Set by Median Test Sharpe:")
     print(parameter_summary.head(1).to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     if VERBOSE_ANALYTICS:
@@ -224,9 +288,20 @@ def main():
         print(results["fixed_parameter_results"][selected_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
         print("\nMedian Parameter Set by Median Test Sharpe:")
         print(median_row.to_frame().T.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+        if not factor_summary.empty:
+            print("\nDetailed Factor Decomposition:")
+            print(factor_summary.to_string(index=False, float_format=lambda x: f"{x:.6f}"))
 
     selected_figure = plot_rolling_performance(selected_rolling_metrics, title_prefix="Selected OOS")
     fixed_figure = plot_rolling_performance(fixed_rolling_metrics, title_prefix="Fixed Production OOS")
+    factor_figures = {}
+    if not rolling_factor_exposures.empty:
+        factor_figures["selected_rolling_factor_exposures"] = plot_rolling_factor_exposures(
+            selected_factor_rolling, title_prefix="Selected OOS"
+        )
+        factor_figures["fixed_rolling_factor_exposures"] = plot_rolling_factor_exposures(
+            fixed_factor_rolling, title_prefix="Fixed Production OOS"
+        )
     if SAVE_REPORTS:
         report_path, timestamp = create_experiment_directory(
             REPORT_ROOT, WALK_FORWARD_VALIDATION.name
@@ -238,6 +313,7 @@ def main():
                 {
                     "selected_rolling_performance": selected_figure,
                     "fixed_production_rolling_performance": fixed_figure,
+                    **factor_figures,
                 },
             )
         save_metadata(
@@ -258,6 +334,9 @@ def main():
                 "slippage_bps": SLIPPAGE_BPS,
                 "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
                 "max_position_weight": MAX_POSITION_WEIGHT,
+                "factor_analysis_enabled": ENABLE_FACTOR_ANALYSIS,
+                "factor_frequency": FACTOR_FREQUENCY,
+                "ff5_analysis_enabled": ENABLE_FF5_ANALYSIS,
             },
             {
                 "walk_forward_mode": WALK_FORWARD_MODE,
@@ -265,6 +344,8 @@ def main():
                 "test_length": WALK_FORWARD_TEST_LENGTH,
                 "step_length": WALK_FORWARD_STEP_LENGTH,
                 "rolling_metrics_window": WALK_FORWARD_ROLLING_METRICS_WINDOW,
+                "factor_rolling_model": FACTOR_ROLLING_MODEL,
+                "factor_rolling_window": FACTOR_ROLLING_WINDOW,
                 "fixed_production_momentum_params": PRODUCTION_MOMENTUM_PARAMS,
                 "fixed_production_mean_reversion_params": PRODUCTION_MEAN_REVERSION_PARAMS,
                 "momentum_grid": WALK_FORWARD_MOMENTUM_GRID,

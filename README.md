@@ -21,6 +21,7 @@ survivorship-bias-free.
 - Turnover, gross exposure, drawdown, CAPM, and regime analysis
 - Optional current S&P 500 universe, liquidity eligibility, and sector exposure reporting
 - Optional research-only SciPy constrained sleeve optimizer
+- Ken French CAPM, Fama-French 3-factor, and optional 5-factor decomposition
 
 ## Configuration Highlights
 
@@ -34,6 +35,8 @@ survivorship-bias-free.
   `"turnover_adjusted"`; `"fixed"` preserves the original return path.
 - Set `ENABLE_CONSTRAINED_OPTIMIZER = True` to print optional research-only
   minimum-variance sleeve weights; inverse-vol remains the main construction.
+- Set `ENABLE_FACTOR_ANALYSIS = True` to export Ken French factor attribution;
+  set `ENABLE_FF5_ANALYSIS = True` to add profitability and investment factors.
 
 ## Experiment Modes
 
@@ -74,6 +77,30 @@ fixed comparison, train/test metrics and CAPM results, calculates parameter
 stability, plots rolling OOS Sharpe, volatility, beta, and alpha, and exports
 structured CSV tables including `selected_results.csv` and
 `fixed_parameter_results.csv`.
+
+## Factor Analysis
+
+The reporting layer retrieves official factor return files from the
+[Kenneth R. French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html)
+and runs statsmodels OLS regressions with HAC/Newey-West standard errors by
+default. This extends, rather than replaces, the existing benchmark-versus-SPY
+CAPM reporting.
+
+- `Mkt-RF`: market excess return, used for market beta.
+- `SMB`: small-minus-big size factor.
+- `HML`: high-minus-low value factor.
+- `RMW`: robust-minus-weak profitability factor, available in optional FF5.
+- `CMA`: conservative-minus-aggressive investment factor, available in optional FF5.
+- `RF`: risk-free return deducted from portfolio returns before regression.
+
+`FACTOR_FREQUENCY = "daily"` aligns each realized portfolio trading-day return
+with the same dated realized factor observation. Setting it to `"monthly"`
+compounds portfolio returns to calendar month end and aligns them with monthly
+French factor observations. Factor data is used only for after-the-fact
+attribution and rolling exposure diagnostics; it is not fed into strategy
+signals, position construction, or execution decisions. Reports include
+`factor_summary.csv`, `rolling_factor_exposures.csv`, and rolling factor
+exposure charts when the official dataset is available.
 
 ## Project Structure
 
