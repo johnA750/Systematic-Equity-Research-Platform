@@ -1,6 +1,9 @@
+import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from config.modes import get_experiment_mode
 from config.config import (
     TICKERS,
     BENCHMARK_TICKER,
@@ -25,6 +28,11 @@ from config.config import (
     SLIPPAGE_TURNOVER_MULTIPLIER,
     ENABLE_CONSTRAINED_OPTIMIZER,
     OPTIMIZER_MAX_WEIGHT,
+    REPORT_ROOT,
+    SAVE_REPORTS,
+    SAVE_PLOTS,
+    SAVE_INDIVIDUAL_PLOTS,
+    VERBOSE_ANALYTICS,
 )
 
 from data.loader import load_market_data, load_price_data, clean_price_data
@@ -54,7 +62,18 @@ from engine.backtest import run_backtest
 from portfolio.regime import compute_regime_multiplier
 from portfolio.vol_targeting import apply_vol_targeting
 from portfolio.optimization import optimize_long_only_weights
-from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown, plot_gross_exposure
+from reporting.plots import (
+    plot_backtest_dashboard,
+    plot_strategy_vs_benchmark,
+    plot_drawdown,
+    plot_gross_exposure,
+)
+from reporting.experiments import (
+    create_experiment_directory,
+    save_figures,
+    save_metadata,
+    save_tables,
+)
 
 
 # =========================
@@ -68,7 +87,13 @@ TARGET_ANNUAL_VOL = 0.12
 VOL_TARGET_WINDOW = 20
 VOL_TARGET_MAX_LEVERAGE = 1.5
 
-VERBOSE = False
+ACTIVE_MODE = get_experiment_mode(os.environ.get("BACKTEST_MODE", "production_baseline"))
+USE_SP500_UNIVERSE = ACTIVE_MODE.use_sp500_universe
+ENABLE_LIQUIDITY_FILTER = ACTIVE_MODE.enable_liquidity_filter
+MAX_POSITION_WEIGHT = ACTIVE_MODE.max_position_weight
+SLIPPAGE_MODEL = ACTIVE_MODE.slippage_model
+ENABLE_CONSTRAINED_OPTIMIZER = ACTIVE_MODE.enable_constrained_optimizer
+VERBOSE = VERBOSE_ANALYTICS
 
 # =========================
 # Load and clean price data
@@ -119,6 +144,7 @@ if ENABLE_LIQUIDITY_FILTER:
         lookback_window=ADV_LOOKBACK_WINDOW,
     )
 
+print(f"Mode: {ACTIVE_MODE.name}")
 print(
     f"Universe: {'Current S&P 500' if USE_SP500_UNIVERSE else 'Configured ticker list'} "
     f"({len(prices.columns)} retained of {len(universe_tickers)} requested)"
@@ -355,19 +381,7 @@ combined_vol_regime = compute_regime_metrics(
 # =========================
 # Print metrics
 # =========================
-print(f"Slippage Model: {SLIPPAGE_MODEL} ({SLIPPAGE_BPS:.2f} base bps)")
-
-print("\nMomentum Strategy Metrics:")
-for key, value in momentum_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nMean Reversion Strategy Metrics:")
-for key, value in meanrev_metrics.items():
-    print(f"{key}: {value:.4f}")
-
-print("\nInverse-Vol Combined Weights:")
-print(f"Momentum Weight: {base_mom_weight:.4f}")
-print(f"Mean Reversion Weight: {base_mr_weight:.4f}")
+print(f"Execution: {SLIPPAGE_MODEL} slippage ({SLIPPAGE_BPS:.2f} base bps)")
 
 print("\nInverse-Vol Combined Strategy Metrics:")
 for key, value in combined_metrics.items():
@@ -377,23 +391,6 @@ print("\nVol-Targeted Combined Strategy Metrics:")
 for key, value in vol_targeted_metrics.items():
     print(f"{key}: {value:.4f}")
 
-print("\nGross Exposure Summary:")
-for key, value in combined_exposure_metrics.items():
-    print(f"Inverse-Vol Combined {key}: {value:.4f}")
-for key, value in vol_targeted_exposure_metrics.items():
-    print(f"Vol-Targeted Combined {key}: {value:.4f}")
-
-if not combined_sector_exposure.empty:
-    print("\nInverse-Vol Combined Sector Exposure:")
-    print(combined_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
-    print("\nVol-Targeted Combined Sector Exposure:")
-    print(vol_targeted_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
-
-if optimized_sleeve_weights is not None:
-    print("\nResearch-Only Constrained Minimum-Variance Sleeve Weights:")
-    for key, value in optimized_sleeve_weights.items():
-        print(f"{key}: {value:.4f}")
-
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
 print(f"Mean Reversion: {meanrev_cumulative.iloc[-1]:.4f}")
@@ -401,21 +398,55 @@ print(f"Inverse-Vol Combined: {combined_cumulative.iloc[-1]:.4f}")
 print(f"Vol-Targeted Combined: {vol_targeted_cumulative.iloc[-1]:.4f}")
 print(f"SPY: {benchmark_cumulative.iloc[-1]:.4f}")
 
-print("\nCombined Strategy CAPM Regression:")
-for key, value in combined_capm_summary.items():
-    if isinstance(value, str):
-        print(f"{key}: {value}")
-    else:
-        print(f"{key}: {value:.6f}")
-
-print("\nVol-Targeted Combined CAPM Regression:")
-for key, value in vol_targeted_capm_summary.items():
-    if isinstance(value, str):
-        print(f"{key}: {value}")
-    else:
-        print(f"{key}: {value:.6f}")
+print("\nCore CAPM Summary:")
+print(f"Inverse-Vol Alpha Annualized: {combined_capm_summary['Alpha Annualized']:.6f}")
+print(f"Inverse-Vol Beta: {combined_capm_summary['Beta']:.6f}")
+print(f"Inverse-Vol Alpha p-value: {combined_capm_summary['Alpha p-value']:.6f}")
 
 if VERBOSE:
+    print("\nMomentum Strategy Metrics:")
+    for key, value in momentum_metrics.items():
+        print(f"{key}: {value:.4f}")
+
+    print("\nMean Reversion Strategy Metrics:")
+    for key, value in meanrev_metrics.items():
+        print(f"{key}: {value:.4f}")
+
+    print("\nInverse-Vol Combined Weights:")
+    print(f"Momentum Weight: {base_mom_weight:.4f}")
+    print(f"Mean Reversion Weight: {base_mr_weight:.4f}")
+
+    print("\nGross Exposure Summary:")
+    for key, value in combined_exposure_metrics.items():
+        print(f"Inverse-Vol Combined {key}: {value:.4f}")
+    for key, value in vol_targeted_exposure_metrics.items():
+        print(f"Vol-Targeted Combined {key}: {value:.4f}")
+
+    if not combined_sector_exposure.empty:
+        print("\nInverse-Vol Combined Sector Exposure:")
+        print(combined_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
+        print("\nVol-Targeted Combined Sector Exposure:")
+        print(vol_targeted_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
+
+    if optimized_sleeve_weights is not None:
+        print("\nResearch-Only Constrained Minimum-Variance Sleeve Weights:")
+        for key, value in optimized_sleeve_weights.items():
+            print(f"{key}: {value:.4f}")
+
+    print("\nCombined Strategy CAPM Regression:")
+    for key, value in combined_capm_summary.items():
+        if isinstance(value, str):
+            print(f"{key}: {value}")
+        else:
+            print(f"{key}: {value:.6f}")
+
+    print("\nVol-Targeted Combined CAPM Regression:")
+    for key, value in vol_targeted_capm_summary.items():
+        if isinstance(value, str):
+            print(f"{key}: {value}")
+        else:
+            print(f"{key}: {value:.6f}")
+
     print("\nMomentum Turnover Metrics:")
     for key, value in momentum_turnover_metrics.items():
         print(f"{key}: {value:.4f}")
@@ -437,53 +468,155 @@ if VERBOSE:
 # =========================
 # Plots
 # =========================
-plot_strategy_vs_benchmark(
-    momentum_cumulative,
-    benchmark_cumulative.reindex(momentum_cumulative.index),
-    strategy_label="Momentum",
-    benchmark_label="SPY"
-)
+figures = {
+    "comparison_dashboard": plot_backtest_dashboard(
+        cumulative_returns={
+            "Momentum": momentum_cumulative,
+            "Mean Reversion": meanrev_cumulative,
+            "Combined Inverse-Vol": combined_cumulative,
+            "Vol-Targeted Combined": vol_targeted_cumulative,
+            "SPY": benchmark_cumulative,
+        },
+        drawdowns={
+            "Momentum": momentum_drawdown,
+            "Mean Reversion": meanrev_drawdown,
+            "Combined Inverse-Vol": combined_drawdown,
+            "Vol-Targeted Combined": vol_targeted_drawdown,
+            "SPY": benchmark_drawdown,
+        },
+        gross_exposures={
+            "Combined Inverse-Vol": combined_gross_exposure,
+            "Vol-Targeted Combined": vol_targeted_gross_exposure,
+        },
+        metrics_summary={
+            "Momentum": momentum_metrics,
+            "Mean Rev.": meanrev_metrics,
+            "Combined": combined_metrics,
+            "Vol Target": vol_targeted_metrics,
+            "SPY": benchmark_metrics,
+        },
+        capm_summary=combined_capm_summary,
+        title=f"{ACTIVE_MODE.name.replace('_', ' ').title()} Dashboard",
+    )
+}
 
-plot_drawdown(momentum_drawdown, title="Momentum Drawdown")
+if SAVE_INDIVIDUAL_PLOTS:
+    figures["momentum_vs_benchmark"] = plot_strategy_vs_benchmark(
+        momentum_cumulative,
+        benchmark_cumulative.reindex(momentum_cumulative.index),
+        strategy_label="Momentum",
+        benchmark_label="SPY",
+    )
+    figures["momentum_drawdown"] = plot_drawdown(momentum_drawdown, title="Momentum Drawdown")
+    figures["mean_reversion_vs_benchmark"] = plot_strategy_vs_benchmark(
+        meanrev_cumulative,
+        benchmark_cumulative.reindex(meanrev_cumulative.index),
+        strategy_label="Mean Reversion",
+        benchmark_label="SPY",
+    )
+    figures["mean_reversion_drawdown"] = plot_drawdown(meanrev_drawdown, title="Mean Reversion Drawdown")
+    figures["combined_inverse_vol_vs_benchmark"] = plot_strategy_vs_benchmark(
+        combined_cumulative,
+        benchmark_cumulative.reindex(combined_cumulative.index),
+        strategy_label="Combined Inverse-Vol",
+        benchmark_label="SPY",
+    )
+    figures["combined_inverse_vol_drawdown"] = plot_drawdown(
+        combined_drawdown, title="Combined Inverse-Vol Drawdown"
+    )
+    figures["vol_targeted_combined_vs_benchmark"] = plot_strategy_vs_benchmark(
+        vol_targeted_cumulative,
+        benchmark_cumulative.reindex(vol_targeted_cumulative.index),
+        strategy_label="Vol-Targeted Combined",
+        benchmark_label="SPY",
+    )
+    figures["vol_targeted_combined_drawdown"] = plot_drawdown(
+        vol_targeted_drawdown, title="Vol-Targeted Combined Drawdown"
+    )
+    figures["combined_inverse_vol_gross_exposure"] = plot_gross_exposure(
+        combined_gross_exposure,
+        title="Combined Inverse-Vol Gross Exposure",
+        label="Combined Inverse-Vol",
+    )
+    figures["vol_targeted_combined_gross_exposure"] = plot_gross_exposure(
+        vol_targeted_gross_exposure,
+        title="Vol-Targeted Combined Gross Exposure",
+        label="Vol-Targeted Combined",
+    )
 
-plot_strategy_vs_benchmark(
-    meanrev_cumulative,
-    benchmark_cumulative.reindex(meanrev_cumulative.index),
-    strategy_label="Mean Reversion",
-    benchmark_label="SPY"
-)
-
-plot_drawdown(meanrev_drawdown, title="Mean Reversion Drawdown")
-
-plot_strategy_vs_benchmark(
-    combined_cumulative,
-    benchmark_cumulative.reindex(combined_cumulative.index),
-    strategy_label="Combined Inverse-Vol",
-    benchmark_label="SPY"
-)
-
-plot_drawdown(combined_drawdown, title="Combined Inverse-Vol Drawdown")
-
-plot_strategy_vs_benchmark(
-    vol_targeted_cumulative,
-    benchmark_cumulative.reindex(vol_targeted_cumulative.index),
-    strategy_label="Vol-Targeted Combined",
-    benchmark_label="SPY"
-)
-
-plot_drawdown(vol_targeted_drawdown, title="Vol-Targeted Combined Drawdown")
-
-plot_gross_exposure(
-    combined_gross_exposure,
-    title="Combined Inverse-Vol Gross Exposure",
-    label="Combined Inverse-Vol",
-)
-
-plot_gross_exposure(
-    vol_targeted_gross_exposure,
-    title="Vol-Targeted Combined Gross Exposure",
-    label="Vol-Targeted Combined",
-)
+if SAVE_REPORTS:
+    report_directory, timestamp = create_experiment_directory(REPORT_ROOT, ACTIVE_MODE.name)
+    metric_rows = []
+    for name, metrics in (
+        ("momentum", momentum_metrics),
+        ("mean_reversion", meanrev_metrics),
+        ("combined_inverse_vol", combined_metrics),
+        ("combined_vol_targeted", vol_targeted_metrics),
+        ("benchmark_spy", benchmark_metrics),
+    ):
+        metric_rows.append({"portfolio": name, **metrics})
+    capm_table = pd.DataFrame(
+        [
+            {"portfolio": "combined_inverse_vol", **combined_capm_summary},
+            {"portfolio": "combined_vol_targeted", **vol_targeted_capm_summary},
+        ]
+    )
+    tables = {
+        "summary_metrics": pd.DataFrame(metric_rows),
+        "capm_summary": capm_table,
+        "gross_exposure_summary": pd.DataFrame(
+            [
+                {"portfolio": "combined_inverse_vol", **combined_exposure_metrics},
+                {"portfolio": "combined_vol_targeted", **vol_targeted_exposure_metrics},
+            ]
+        ),
+        "daily_returns": pd.concat(
+            [
+                momentum_returns.rename("momentum"),
+                meanrev_returns.rename("mean_reversion"),
+                combined_returns.rename("combined_inverse_vol"),
+                vol_targeted_returns.rename("combined_vol_targeted"),
+                benchmark_returns.rename("benchmark_spy"),
+            ],
+            axis=1,
+        ).reset_index(names="date"),
+    }
+    if not combined_sector_exposure.empty:
+        tables["combined_inverse_vol_sector_exposure"] = combined_sector_exposure.reset_index(names="sector")
+        tables["combined_vol_targeted_sector_exposure"] = vol_targeted_sector_exposure.reset_index(names="sector")
+    save_tables(report_directory, tables)
+    if SAVE_PLOTS:
+        save_figures(report_directory, figures)
+    save_metadata(
+        report_directory,
+        timestamp,
+        ACTIVE_MODE,
+        {
+            "description": "Current S&P 500 constituents" if USE_SP500_UNIVERSE else "Configured 50-stock production universe",
+            "requested_count": len(universe_tickers),
+            "retained_count": len(prices.columns),
+            "benchmark": BENCHMARK_TICKER[0],
+            "start_date": START_DATE,
+            "end_date": END_DATE,
+        },
+        {
+            "transaction_cost": TRANSACTION_COST,
+            "slippage_model": SLIPPAGE_MODEL,
+            "slippage_bps": SLIPPAGE_BPS,
+            "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
+            "max_position_weight": MAX_POSITION_WEIGHT,
+        },
+        {
+            "momentum_lookback": MOMENTUM_LOOKBACK,
+            "top_n": TOP_N,
+            "rebalance_freq": REBALANCE_FREQ,
+            "min_stock_price": MIN_STOCK_PRICE,
+            "max_missing_data_fraction": MAX_MISSING_DATA_FRACTION,
+            "adv_lookback_window": ADV_LOOKBACK_WINDOW,
+            "min_average_dollar_volume": MIN_AVERAGE_DOLLAR_VOLUME,
+        },
+    )
+    print(f"\nReport saved: {report_directory}")
 
 # Show all plots at once
 plt.show()

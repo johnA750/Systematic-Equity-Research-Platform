@@ -35,14 +35,35 @@ survivorship-bias-free.
 - Set `ENABLE_CONSTRAINED_OPTIMIZER = True` to print optional research-only
   minimum-variance sleeve weights; inverse-vol remains the main construction.
 
-## Walk-Forward Research
+## Experiment Modes
 
-The production runner remains `run_backtest.py`. Institutional-style
-out-of-sample evaluation is available separately:
+The project exposes three explicit modes. Each run creates a timestamped
+artifact directory under `reports/<mode>/` containing result tables, plots,
+and `experiment_metadata.json` with the effective universe, configuration,
+and execution assumptions.
 
 ```powershell
+# Production 50-stock fixed-parameter baseline
+.\.venv\Scripts\python.exe run_production_baseline.py
+
+# Current S&P 500 scalability and realism research
+.\.venv\Scripts\python.exe research\run_sp500_research.py
+
+# Rolling/expanding out-of-sample validation
 .\.venv\Scripts\python.exe research\run_walk_forward.py
 ```
+
+`run_backtest.py` remains backwards-compatible and defaults to the production
+baseline profile. Set `VERBOSE_ANALYTICS = True` in `config/config.py` to
+restore detailed console sections; summary tables and detailed plots are
+saved regardless when `SAVE_REPORTS = True`.
+
+Full-sample modes save one large `comparison_dashboard.png` by default, with
+cumulative value, drawdown, gross exposure, and headline metric/CAPM panels
+shown together for easier comparison. Set `SAVE_INDIVIDUAL_PLOTS = True` to
+also retain the separate legacy charts.
+
+## Walk-Forward Research
 
 Configure rolling or expanding evaluation through the `WALK_FORWARD_*`
 settings in `config/config.py`. The runner selects parameter combinations

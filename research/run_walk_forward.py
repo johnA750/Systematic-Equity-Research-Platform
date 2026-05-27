@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,6 +7,7 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.rolling import compute_rolling_performance
+from config.modes import WALK_FORWARD_VALIDATION
 from config.config import (
     TICKERS,
     BENCHMARK_TICKER,
@@ -32,22 +32,33 @@ from config.config import (
     WALK_FORWARD_TEST_LENGTH,
     WALK_FORWARD_STEP_LENGTH,
     WALK_FORWARD_ROLLING_METRICS_WINDOW,
-    WALK_FORWARD_EXPORT_RESULTS,
-    WALK_FORWARD_REPORT_DIR,
-    WALK_FORWARD_SAVE_PLOTS,
     WALK_FORWARD_MOMENTUM_GRID,
     WALK_FORWARD_MEAN_REVERSION_GRID,
+    REPORT_ROOT,
+    SAVE_REPORTS,
+    SAVE_PLOTS,
+    VERBOSE_ANALYTICS,
 )
 from data.liquidity import build_liquidity_eligibility_mask
 from data.loader import clean_price_data, load_market_data, load_price_data
 from data.sp500 import get_sp500_constituents
 from analytics.returns import compute_daily_returns
 from reporting.plots import plot_rolling_performance
-from research.walk_forward import export_walk_forward_results, run_walk_forward_evaluation
+from reporting.experiments import (
+    create_experiment_directory,
+    save_figures,
+    save_metadata,
+    save_tables,
+)
+from research.walk_forward import run_walk_forward_evaluation
 
 
 CAPM_USE_HAC = True
 CAPM_HAC_LAGS = 5
+USE_SP500_UNIVERSE = WALK_FORWARD_VALIDATION.use_sp500_universe
+ENABLE_LIQUIDITY_FILTER = WALK_FORWARD_VALIDATION.enable_liquidity_filter
+MAX_POSITION_WEIGHT = WALK_FORWARD_VALIDATION.max_position_weight
+SLIPPAGE_MODEL = WALK_FORWARD_VALIDATION.slippage_model
 
 
 def load_research_data():
@@ -184,29 +195,57 @@ def main():
         "test_alpha_annualized",
         "test_alpha_p_value",
     ]
-    print("\nSelected Configuration Out-of-Sample Results:")
-    print(results["selected_results"][selected_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
-
     parameter_summary = results["parameter_summary"]
     median_row = parameter_summary.iloc[len(parameter_summary) // 2]
-    print("\nBest Parameter Set by Median Test Sharpe:")
-    print(parameter_summary.head(1).to_string(index=False, float_format=lambda x: f"{x:.4f}"))
-    print("\nMedian Parameter Set by Median Test Sharpe:")
-    print(median_row.to_frame().T.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     print("\nSelection Stability Summary:")
     print(results["stability_summary"].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
-    report_path = Path(WALK_FORWARD_REPORT_DIR)
-    if WALK_FORWARD_EXPORT_RESULTS:
-        export_walk_forward_results(results, report_path)
-        print(f"\nCSV research tables saved under: {report_path}")
+    print("\nBest Parameter Set by Median Test Sharpe:")
+    print(parameter_summary.head(1).to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+    if VERBOSE_ANALYTICS:
+        print("\nSelected Configuration Out-of-Sample Results:")
+        print(results["selected_results"][selected_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+        print("\nMedian Parameter Set by Median Test Sharpe:")
+        print(median_row.to_frame().T.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
     figure = plot_rolling_performance(rolling_metrics, title_prefix="Selected OOS")
-    if WALK_FORWARD_SAVE_PLOTS:
-        report_path.mkdir(parents=True, exist_ok=True)
-        plot_path = report_path / "rolling_performance.png"
-        figure.savefig(plot_path, dpi=150, bbox_inches="tight")
-        print(f"Rolling performance chart saved to: {plot_path}")
+    if SAVE_REPORTS:
+        report_path, timestamp = create_experiment_directory(
+            REPORT_ROOT, WALK_FORWARD_VALIDATION.name
+        )
+        save_tables(report_path, results)
+        if SAVE_PLOTS:
+            save_figures(report_path, {"rolling_performance": figure})
+        save_metadata(
+            report_path,
+            timestamp,
+            WALK_FORWARD_VALIDATION,
+            {
+                "description": universe_name,
+                "requested_count": requested_count,
+                "retained_count": len(prices.columns),
+                "benchmark": BENCHMARK_TICKER[0],
+                "start_date": START_DATE,
+                "end_date": END_DATE,
+            },
+            {
+                "transaction_cost": TRANSACTION_COST,
+                "slippage_model": SLIPPAGE_MODEL,
+                "slippage_bps": SLIPPAGE_BPS,
+                "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
+                "max_position_weight": MAX_POSITION_WEIGHT,
+            },
+            {
+                "walk_forward_mode": WALK_FORWARD_MODE,
+                "train_length": WALK_FORWARD_TRAIN_LENGTH,
+                "test_length": WALK_FORWARD_TEST_LENGTH,
+                "step_length": WALK_FORWARD_STEP_LENGTH,
+                "rolling_metrics_window": WALK_FORWARD_ROLLING_METRICS_WINDOW,
+                "momentum_grid": WALK_FORWARD_MOMENTUM_GRID,
+                "mean_reversion_grid": WALK_FORWARD_MEAN_REVERSION_GRID,
+            },
+        )
+        print(f"\nReport saved: {report_path}")
 
     plt.show()
 

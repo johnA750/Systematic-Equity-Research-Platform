@@ -47,6 +47,13 @@ SLIPPAGE_TURNOVER_MULTIPLIER = 1.0
 ENABLE_CONSTRAINED_OPTIMIZER = False
 OPTIMIZER_MAX_WEIGHT = 0.75
 
+# Reproducible experiment/report settings shared by run modes.
+REPORT_ROOT = "reports"
+SAVE_REPORTS = True
+SAVE_PLOTS = True
+SAVE_INDIVIDUAL_PLOTS = False
+VERBOSE_ANALYTICS = False
+
 # Walk-forward research settings. These are used only by
 # research/run_walk_forward.py; the production full-sample runner is unchanged.
 WALK_FORWARD_MODE = "rolling"
@@ -55,7 +62,6 @@ WALK_FORWARD_TEST_LENGTH = 126
 WALK_FORWARD_STEP_LENGTH = 126
 WALK_FORWARD_ROLLING_METRICS_WINDOW = 63
 WALK_FORWARD_EXPORT_RESULTS = True
-WALK_FORWARD_REPORT_DIR = "reports/walk_forward"
 WALK_FORWARD_SAVE_PLOTS = True
 
 WALK_FORWARD_MOMENTUM_GRID = [

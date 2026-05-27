@@ -1,7 +1,14 @@
+import logging
+
 import yfinance as yf
 import pandas as pd
 
 from data.sp500 import normalize_yahoo_ticker
+
+
+# Report retained symbols at the application layer instead of printing
+# yfinance batch-level no-history diagnostics for current-index research.
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 
 def _extract_field(data, requested_tickers, field):
