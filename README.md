@@ -1,118 +1,220 @@
-# Trading Strategy Backtesting Engine
+# Systematic Equity Backtesting and Research Platform
 
-A modular Python backtesting engine for evaluating rule-based equity trading strategies on historical U.S. stock data.
+A modular Python platform for testing long-only U.S. equity strategies across a fixed production baseline, a current S&P 500 research universe, and walk-forward out-of-sample validation.
 
-## Overview
+The platform keeps signal logic simple and auditable while adding portfolio construction, execution modeling, exposure analysis, factor decomposition, and reproducible experiment reporting.
 
-This project simulates how a portfolio would have performed when following systematic trading rules over time. It is designed to support clean experimentation with simple strategies, transparent assumptions, and reproducible results.
+## Highlights
 
-The engine supports a fixed research universe or an optional current S&P 500
-universe, momentum and pullback sleeves, realistic execution assumptions, and
-robustness analytics. A current-constituent S&P 500 universe is not a
-point-in-time historical membership dataset and should not be described as
-survivorship-bias-free.
+- Momentum and pullback-based mean reversion strategy sleeves
+- Inverse-volatility production portfolio construction with volatility targeting
+- Production 50-stock baseline and optional current S&P 500 research universe
+- Missing-data, price, and optional lagged average-dollar-volume eligibility filters
+- Transaction costs plus fixed, volatility-adjusted, or turnover-adjusted slippage
+- Position caps, turnover tracking, gross exposure, drawdown, and sector exposure reporting
+- CAPM and Fama-French 3-factor / optional 5-factor attribution with rolling exposures
+- Rolling or expanding walk-forward validation comparing selected parameters with fixed production parameters
+- Timestamped report folders containing CSV outputs, plots, and configuration metadata
 
-## Current Scope
+## Research Caveat
 
-- Historical daily U.S. equity data
-- Momentum and pullback-based mean reversion strategies
-- Inverse-vol sleeve combination and volatility targeting
-- Transaction costs plus fixed or optional adaptive slippage
-- Turnover, gross exposure, drawdown, CAPM, and regime analysis
-- Optional current S&P 500 universe, liquidity eligibility, and sector exposure reporting
-- Optional research-only SciPy constrained sleeve optimizer
-- Ken French CAPM, Fama-French 3-factor, and optional 5-factor decomposition
+The S&P 500 mode retrieves the current constituent list and applies it across historical returns. It is useful for testing scalability and execution realism, but it is not a survivorship-bias-free historical index-membership study. Results from that mode should be described as current-constituent research, not point-in-time index performance.
 
-## Configuration Highlights
+## Strategy And Portfolio Design
 
-- Set `USE_SP500_UNIVERSE = True` in `config/config.py` to use the current
-  S&P 500 constituent list; leave it `False` for the original 50-stock baseline.
-- Set `ENABLE_LIQUIDITY_FILTER = True` to apply lagged rolling average-dollar-
-  volume eligibility using `MIN_AVERAGE_DOLLAR_VOLUME` and `ADV_LOOKBACK_WINDOW`.
-- Set `MAX_POSITION_WEIGHT` to a decimal cap such as `0.10`; leave it `None`
-  to preserve original weighting behavior.
-- Set `SLIPPAGE_MODEL` to `"fixed"`, `"volatility_adjusted"`, or
-  `"turnover_adjusted"`; `"fixed"` preserves the original return path.
-- Set `ENABLE_CONSTRAINED_OPTIMIZER = True` to print optional research-only
-  minimum-variance sleeve weights; inverse-vol remains the main construction.
-- Set `ENABLE_FACTOR_ANALYSIS = True` to export Ken French factor attribution;
-  set `ENABLE_FF5_ANALYSIS = True` to add profitability and investment factors.
+The production strategy behavior remains intentionally stable:
+
+| Component | Implementation |
+| --- | --- |
+| Momentum sleeve | Ranks equities by trailing returns and holds the strongest names on rebalance dates. |
+| Mean reversion sleeve | Selects qualifying pullbacks within the existing trend and pullback rules. |
+| Portfolio construction | Combines sleeves using inverse-volatility weights by default. |
+| Volatility control | Applies portfolio-level volatility targeting. |
+| Risk controls | Optional maximum position weight and gross exposure reporting. |
+| Execution | Transaction costs and configurable slippage models applied to turnover. |
+
+Research features evaluate these decisions; they do not replace the production signal logic or production parameter defaults.
 
 ## Experiment Modes
 
-The project exposes three explicit modes. Each run creates a timestamped
-artifact directory under `reports/<mode>/` containing result tables, plots,
-and `experiment_metadata.json` with the effective universe, configuration,
-and execution assumptions.
+| Mode | Entry Point | Universe | Purpose |
+| --- | --- | --- | --- |
+| Production baseline | `run_production_baseline.py` | Fixed 50-stock universe | Stable production-parameter reference run |
+| S&P 500 research | `research/run_sp500_research.py` | Current S&P 500 constituents | Scalability, liquidity, sector, and execution research |
+| Walk-forward validation | `research/run_walk_forward.py` | Configured validation universe | Rolling or expanding out-of-sample robustness testing |
+
+Run the modes from the repository root:
 
 ```powershell
-# Production 50-stock fixed-parameter baseline
+# Production 50-stock baseline
 .\.venv\Scripts\python.exe run_production_baseline.py
 
-# Current S&P 500 scalability and realism research
+# Current S&P 500 scalability research
 .\.venv\Scripts\python.exe research\run_sp500_research.py
 
-# Rolling/expanding out-of-sample validation
+# Walk-forward out-of-sample validation
 .\.venv\Scripts\python.exe research\run_walk_forward.py
 ```
 
-`run_backtest.py` remains backwards-compatible and defaults to the production
-baseline profile. Set `VERBOSE_ANALYTICS = True` in `config/config.py` to
-restore detailed console sections; summary tables and detailed plots are
-saved regardless when `SAVE_REPORTS = True`.
+`run_backtest.py` remains a backwards-compatible production baseline entry point.
 
-Full-sample modes save one large `comparison_dashboard.png` by default, with
-cumulative value, drawdown, gross exposure, and headline metric/CAPM panels
-shown together for easier comparison. Set `SAVE_INDIVIDUAL_PLOTS = True` to
-also retain the separate legacy charts.
+## Quick Start
+
+Python 3.10 or newer is recommended.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install pandas numpy matplotlib yfinance statsmodels scipy
+python run_production_baseline.py
+```
+
+`scipy` is used only when the optional constrained portfolio research optimizer is enabled. Factor analysis downloads official Ken French factor files at run time when enabled.
+
+## Configuration
+
+Primary settings are in `config/config.py`. The mode definitions in `config/modes.py` provide coherent baseline, S&P 500, and walk-forward profiles.
+
+| Configuration Area | Key Settings | Purpose |
+| --- | --- | --- |
+| Universe | `USE_SP500_UNIVERSE`, `TICKERS`, `BENCHMARK_TICKER` | Choose the fixed universe or current S&P 500 constituents. |
+| Dates and strategy | `START_DATE`, `END_DATE`, `MOMENTUM_LOOKBACK`, `TOP_N`, `REBALANCE_FREQ` | Define the backtest period and existing strategy defaults. |
+| Data quality | `MAX_MISSING_DATA_FRACTION`, `MIN_STOCK_PRICE`, `DATA_DOWNLOAD_BATCH_SIZE` | Filter incomplete or impractical data and support large downloads. |
+| Liquidity | `ENABLE_LIQUIDITY_FILTER`, `MIN_AVERAGE_DOLLAR_VOLUME`, `ADV_LOOKBACK_WINDOW` | Apply lagged rolling dollar-volume eligibility when volume is available. |
+| Position risk | `MAX_POSITION_WEIGHT` | Optionally cap individual position weights. |
+| Execution | `TRANSACTION_COST`, `SLIPPAGE_MODEL`, `SLIPPAGE_BPS` | Control transaction costs and fixed or adaptive slippage assumptions. |
+| Reporting | `SAVE_REPORTS`, `SAVE_PLOTS`, `SAVE_INDIVIDUAL_PLOTS`, `VERBOSE_ANALYTICS` | Control exported artifacts and console detail. |
+| Factor analysis | `ENABLE_FACTOR_ANALYSIS`, `ENABLE_FF5_ANALYSIS`, `FACTOR_FREQUENCY`, `FACTOR_ROLLING_WINDOW` | Configure attribution and rolling exposure reporting. |
+| Walk-forward | `WALK_FORWARD_MODE`, `WALK_FORWARD_TRAIN_LENGTH`, `WALK_FORWARD_TEST_LENGTH`, `WALK_FORWARD_STEP_LENGTH` | Configure out-of-sample evaluation windows. |
+
+The fixed baseline defaults preserve the original execution path. Advanced liquidity constraints, adaptive slippage, S&P 500 selection, and constrained optimization are research controls that can be enabled explicitly.
 
 ## Walk-Forward Research
 
-Configure rolling or expanding evaluation through the `WALK_FORWARD_*`
-settings in `config/config.py`. The runner selects parameter combinations
-using training-period Sharpe only, applies train-estimated inverse-vol sleeve
-weights to the following test period, and evaluates the fixed production
-parameter pair on the identical OOS windows. It reports a selected-versus-
-fixed comparison, train/test metrics and CAPM results, calculates parameter
-stability, plots rolling OOS Sharpe, volatility, beta, and alpha, and exports
-structured CSV tables including `selected_results.csv` and
-`fixed_parameter_results.csv`.
+The walk-forward runner supports both rolling-window and expanding-window studies. For each test period it evaluates:
 
-## Factor Analysis
+- A train-selected parameter path chosen using training-window results.
+- A fixed-production-parameter path using the unchanged production defaults.
 
-The reporting layer retrieves official factor return files from the
-[Kenneth R. French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html)
-and runs statsmodels OLS regressions with HAC/Newey-West standard errors by
-default. This extends, rather than replaces, the existing benchmark-versus-SPY
-CAPM reporting.
+This comparison directly tests whether parameter selection improves out-of-sample performance or merely adds instability. Reported outputs include train and test metrics, test-period CAPM summaries, Sharpe degradation, drawdown comparisons, positive test-period fraction, and parameter stability information.
 
-- `Mkt-RF`: market excess return, used for market beta.
-- `SMB`: small-minus-big size factor.
-- `HML`: high-minus-low value factor.
-- `RMW`: robust-minus-weak profitability factor, available in optional FF5.
-- `CMA`: conservative-minus-aggressive investment factor, available in optional FF5.
-- `RF`: risk-free return deducted from portfolio returns before regression.
+Key exports include:
 
-`FACTOR_FREQUENCY = "daily"` aligns each realized portfolio trading-day return
-with the same dated realized factor observation. Setting it to `"monthly"`
-compounds portfolio returns to calendar month end and aligns them with monthly
-French factor observations. Factor data is used only for after-the-fact
-attribution and rolling exposure diagnostics; it is not fed into strategy
-signals, position construction, or execution decisions. Reports include
-`factor_summary.csv`, `rolling_factor_exposures.csv`, and rolling factor
-exposure charts when the official dataset is available.
+```text
+selected_results.csv
+fixed_parameter_results.csv
+comparison_summary.csv
+parameter_stability.csv
+rolling_performance.csv
+```
+
+## Factor Attribution
+
+Factor attribution extends the existing SPY-based CAPM workflow without changing signals or positions. The reporting layer retrieves factor data from the official [Kenneth R. French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html) and estimates regressions with `statsmodels` OLS, using HAC/Newey-West standard errors by default.
+
+| Model | Exposures |
+| --- | --- |
+| CAPM | Market excess return (`Mkt-RF`) |
+| Fama-French 3-factor | `Mkt-RF`, size (`SMB`), value (`HML`) |
+| Fama-French 5-factor | `Mkt-RF`, `SMB`, `HML`, profitability (`RMW`), investment (`CMA`) |
+
+Daily attribution aligns realized portfolio returns to factor observations on the same realized trading dates. Monthly attribution compounds portfolio returns to calendar months before matching monthly factor data. Factors are used for after-the-fact analysis only, avoiding lookahead into strategy construction.
+
+Exports include:
+
+```text
+factor_summary.csv
+rolling_factor_exposures.csv
+```
+
+## Reporting Artifacts
+
+When `SAVE_REPORTS = True`, every mode creates a timestamped experiment directory:
+
+```text
+reports/
+|-- production_baseline/
+|   `-- <timestamp>/
+|-- sp500_research/
+|   `-- <timestamp>/
+`-- walk_forward_validation/
+    `-- <timestamp>/
+```
+
+Each experiment folder can contain:
+
+- Summary and detailed metrics tables in CSV format
+- CAPM, factor, exposure, sector, or walk-forward result tables where applicable
+- `comparison_dashboard.png`, combining headline performance views for quick review
+- Rolling performance and rolling factor exposure plots
+- `experiment_metadata.json`, recording the timestamp, universe, configuration snapshot, and execution assumptions
+
+Set `VERBOSE_ANALYTICS = True` for detailed console reporting. The default console output stays focused on headline metrics while detailed results remain available in exported artifacts.
 
 ## Project Structure
 
 ```text
-docs/
-data/
-strategies/
-portfolio/
-execution/
-engine/
-analytics/
-reporting/
-config/
+Trading-Backtester/
+|-- analytics/
+|   |-- factors.py                # CAPM, FF3/FF5, and rolling factor exposures
+|   |-- factor_regression.py      # Existing benchmark regression workflow
+|   |-- exposure.py               # Gross and sector exposure analytics
+|   |-- metrics.py                # Portfolio performance metrics
+|   |-- regime_analysis.py        # Regime-based performance reporting
+|   `-- rolling.py                # Rolling performance statistics
+|-- config/
+|   |-- config.py                 # User configuration and production defaults
+|   `-- modes.py                  # Explicit production/research mode profiles
+|-- data/
+|   |-- loader.py                 # Historical price and volume loading
+|   |-- liquidity.py              # ADV-based eligibility filters
+|   `-- sp500.py                  # Current S&P 500 constituents and sectors
+|-- engine/
+|   `-- backtest.py               # Backtest orchestration
+|-- execution/
+|   `-- slippage.py               # Fixed and optional adaptive slippage models
+|-- portfolio/
+|   |-- optimization.py           # Optional research-only constrained optimizer
+|   `-- vol_targeting.py          # Volatility targeting utilities
+|-- reporting/
+|   |-- experiments.py            # Metadata and structured report exports
+|   `-- plots.py                  # Dashboard and research plots
+|-- research/
+|   |-- walk_forward.py           # Windowing, evaluation, and result structures
+|   |-- run_walk_forward.py       # Walk-forward comparison runner
+|   |-- run_sp500_research.py     # Current S&P 500 research runner
+|   |-- momentum_tuning.py        # Momentum research helpers
+|   `-- mean_reversion_tuning.py  # Mean reversion research helpers
+|-- strategies/
+|   |-- momentum.py               # Momentum strategy logic
+|   |-- mean_reversion.py         # Pullback strategy logic
+|   `-- position_sizing.py        # Position cap utilities
+|-- docs/
+|   `-- project_plan.md           # Development roadmap
+|-- run_backtest.py               # Backwards-compatible main runner
+`-- run_production_baseline.py    # Production baseline launcher
+```
 
-run_backtest.py
+## Example Validated Results
+
+The following outputs are from the configured historical test window used during development. They are examples of the platform output, not live performance claims or investment advice.
+
+| Run | Annualized Return | Sharpe | Maximum Drawdown |
+| --- | ---: | ---: | ---: |
+| Fixed 50-stock production baseline | 22.89% | 1.58 | -8.65% |
+| Current S&P 500 research universe after filtering | 9.83% | 0.69 | -12.31% |
+
+In the current S&P 500 research run, 503 constituents were retrieved and 487 were retained after filtering. In the walk-forward comparison, the fixed-production-parameter path achieved a higher average test Sharpe than the train-selected path, supporting the decision to keep production parameters stable while continuing robustness research.
+
+## Data And Methodology Assumptions
+
+- Historical equity prices and available volume data are downloaded through `yfinance`.
+- S&P 500 constituents and sectors represent the current list retrieved for the research run, not historical membership.
+- Missing-data and low-price filters are applied before eligible names are selected for trading.
+- Liquidity eligibility uses lagged rolling average dollar volume when volume is available, so current-day volume is not used to choose current-day positions.
+- Execution models estimate transaction costs and slippage; they do not model complete institutional capacity, borrow constraints, or point-in-time corporate actions.
+- Factor models are attribution tools and do not feed into strategy signals or portfolio optimization by default.
+
+## Scope
+
+The repository is a systematic research platform focused on transparent signal evaluation, portfolio risk handling, and out-of-sample robustness. It is not an execution system, brokerage integration, or investment recommendation.
