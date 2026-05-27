@@ -264,6 +264,30 @@ def compute_selection_stability(selected_results: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([summary])
 
 
+def summarize_oos_path_comparison(
+    selected_results: pd.DataFrame,
+    fixed_results: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compare optimized selection against fixed production parameters by window."""
+    rows = []
+    for path_name, results in (
+        ("selected_parameters", selected_results),
+        ("fixed_production_parameters", fixed_results),
+    ):
+        rows.append(
+            {
+                "path": path_name,
+                "windows_evaluated": len(results),
+                "average_test_sharpe": results["test_sharpe"].mean(),
+                "median_test_sharpe": results["test_sharpe"].median(),
+                "positive_test_fraction": (results["test_annualized_return"] > 0).mean(),
+                "average_test_drawdown": results["test_max_drawdown"].mean(),
+                "average_test_return": results["test_annualized_return"].mean(),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def run_walk_forward_evaluation(
     prices: pd.DataFrame,
     returns: pd.DataFrame,
@@ -279,6 +303,8 @@ def run_walk_forward_evaluation(
     transaction_cost: float,
     max_position_weight: float | None,
     slippage_settings: dict,
+    fixed_momentum_params: dict | None = None,
+    fixed_meanrev_params: dict | None = None,
     capm_use_hac: bool = True,
     capm_hac_lags: int = 5,
 ) -> dict[str, pd.DataFrame | pd.Series]:
@@ -335,13 +361,47 @@ def run_walk_forward_evaluation(
     ].sort_index()
     selected_oos_returns.name = "selected_out_of_sample_return"
 
+    fixed_momentum_params = fixed_momentum_params or momentum_grid[0]
+    fixed_meanrev_params = fixed_meanrev_params or meanrev_grid[0]
+    fixed_rows = []
+    fixed_returns = []
+    for window in windows:
+        row, test_returns = evaluate_parameter_pair(
+            prices=prices,
+            returns=returns,
+            benchmark_prices=benchmark_prices,
+            benchmark_returns=benchmark_returns,
+            liquidity_eligibility=liquidity_eligibility,
+            window=window,
+            parameter_id="fixed_production",
+            momentum_params=fixed_momentum_params,
+            meanrev_params=fixed_meanrev_params,
+            transaction_cost=transaction_cost,
+            max_position_weight=max_position_weight,
+            slippage_settings=slippage_settings,
+            capm_use_hac=capm_use_hac,
+            capm_hac_lags=capm_hac_lags,
+        )
+        fixed_rows.append(row)
+        fixed_returns.append(test_returns)
+
+    fixed_results = pd.DataFrame(fixed_rows).sort_values("window_id").reset_index(drop=True)
+    fixed_oos_returns = pd.concat(fixed_returns)
+    fixed_oos_returns = fixed_oos_returns[
+        ~fixed_oos_returns.index.duplicated(keep="first")
+    ].sort_index()
+    fixed_oos_returns.name = "fixed_production_out_of_sample_return"
+
     return {
         "windows": pd.DataFrame([window.as_record() for window in windows]),
         "all_results": all_results.sort_values(["window_id", "train_sharpe"], ascending=[True, False]),
         "selected_results": selected_rows,
+        "fixed_parameter_results": fixed_results,
         "parameter_summary": summarize_parameter_robustness(all_results),
         "stability_summary": compute_selection_stability(selected_rows),
+        "path_comparison": summarize_oos_path_comparison(selected_rows, fixed_results),
         "oos_returns": selected_oos_returns,
+        "fixed_oos_returns": fixed_oos_returns,
     }
 
 

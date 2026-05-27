@@ -64,6 +64,25 @@ WALK_FORWARD_ROLLING_METRICS_WINDOW = 63
 WALK_FORWARD_EXPORT_RESULTS = True
 WALK_FORWARD_SAVE_PLOTS = True
 
+# Fixed production parameters used as the robustness benchmark in walk-forward
+# validation. These mirror the production runner without changing its logic.
+PRODUCTION_MOMENTUM_PARAMS = {
+    "lookback": MOMENTUM_LOOKBACK,
+    "top_n": TOP_N,
+    "rebalance_freq": REBALANCE_FREQ,
+    "vol_lookback": 20,
+}
+
+PRODUCTION_MEAN_REVERSION_PARAMS = {
+    "lookback": 5,
+    "top_n": 15,
+    "rebalance_freq": 10,
+    "trend_window": 40,
+    "min_pullback": -0.10,
+    "max_pullback": -0.03,
+    "weighting_scheme": "equal",
+}
+
 WALK_FORWARD_MOMENTUM_GRID = [
     {"lookback": 90, "top_n": TOP_N, "rebalance_freq": REBALANCE_FREQ, "vol_lookback": 20},
     {"lookback": MOMENTUM_LOOKBACK, "top_n": TOP_N, "rebalance_freq": REBALANCE_FREQ, "vol_lookback": 20},

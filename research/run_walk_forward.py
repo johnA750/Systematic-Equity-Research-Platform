@@ -34,6 +34,8 @@ from config.config import (
     WALK_FORWARD_ROLLING_METRICS_WINDOW,
     WALK_FORWARD_MOMENTUM_GRID,
     WALK_FORWARD_MEAN_REVERSION_GRID,
+    PRODUCTION_MOMENTUM_PARAMS,
+    PRODUCTION_MEAN_REVERSION_PARAMS,
     REPORT_ROOT,
     SAVE_REPORTS,
     SAVE_PLOTS,
@@ -169,18 +171,28 @@ def main():
             "volatility_reference": SLIPPAGE_VOLATILITY_REFERENCE,
             "turnover_multiplier": SLIPPAGE_TURNOVER_MULTIPLIER,
         },
+        fixed_momentum_params=PRODUCTION_MOMENTUM_PARAMS,
+        fixed_meanrev_params=PRODUCTION_MEAN_REVERSION_PARAMS,
         capm_use_hac=CAPM_USE_HAC,
         capm_hac_lags=CAPM_HAC_LAGS,
     )
 
-    rolling_metrics = compute_rolling_performance(
+    selected_rolling_metrics = compute_rolling_performance(
         results["oos_returns"],
         benchmark_returns.reindex(results["oos_returns"].index),
         window=WALK_FORWARD_ROLLING_METRICS_WINDOW,
         use_hac=CAPM_USE_HAC,
         hac_lags=CAPM_HAC_LAGS,
     )
-    results["rolling_metrics"] = rolling_metrics
+    fixed_rolling_metrics = compute_rolling_performance(
+        results["fixed_oos_returns"],
+        benchmark_returns.reindex(results["fixed_oos_returns"].index),
+        window=WALK_FORWARD_ROLLING_METRICS_WINDOW,
+        use_hac=CAPM_USE_HAC,
+        hac_lags=CAPM_HAC_LAGS,
+    )
+    results["rolling_metrics"] = selected_rolling_metrics
+    results["fixed_rolling_metrics"] = fixed_rolling_metrics
 
     selected_columns = [
         "window_id",
@@ -200,22 +212,34 @@ def main():
     print("\nSelection Stability Summary:")
     print(results["stability_summary"].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
+    print("\nSelected vs Fixed Production OOS Comparison:")
+    print(results["path_comparison"].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+
     print("\nBest Parameter Set by Median Test Sharpe:")
     print(parameter_summary.head(1).to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     if VERBOSE_ANALYTICS:
         print("\nSelected Configuration Out-of-Sample Results:")
         print(results["selected_results"][selected_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+        print("\nFixed Production Parameter Out-of-Sample Results:")
+        print(results["fixed_parameter_results"][selected_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
         print("\nMedian Parameter Set by Median Test Sharpe:")
         print(median_row.to_frame().T.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
-    figure = plot_rolling_performance(rolling_metrics, title_prefix="Selected OOS")
+    selected_figure = plot_rolling_performance(selected_rolling_metrics, title_prefix="Selected OOS")
+    fixed_figure = plot_rolling_performance(fixed_rolling_metrics, title_prefix="Fixed Production OOS")
     if SAVE_REPORTS:
         report_path, timestamp = create_experiment_directory(
             REPORT_ROOT, WALK_FORWARD_VALIDATION.name
         )
         save_tables(report_path, results)
         if SAVE_PLOTS:
-            save_figures(report_path, {"rolling_performance": figure})
+            save_figures(
+                report_path,
+                {
+                    "selected_rolling_performance": selected_figure,
+                    "fixed_production_rolling_performance": fixed_figure,
+                },
+            )
         save_metadata(
             report_path,
             timestamp,
@@ -241,6 +265,8 @@ def main():
                 "test_length": WALK_FORWARD_TEST_LENGTH,
                 "step_length": WALK_FORWARD_STEP_LENGTH,
                 "rolling_metrics_window": WALK_FORWARD_ROLLING_METRICS_WINDOW,
+                "fixed_production_momentum_params": PRODUCTION_MOMENTUM_PARAMS,
+                "fixed_production_mean_reversion_params": PRODUCTION_MEAN_REVERSION_PARAMS,
                 "momentum_grid": WALK_FORWARD_MOMENTUM_GRID,
                 "mean_reversion_grid": WALK_FORWARD_MEAN_REVERSION_GRID,
             },

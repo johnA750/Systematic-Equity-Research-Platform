@@ -68,10 +68,12 @@ also retain the separate legacy charts.
 Configure rolling or expanding evaluation through the `WALK_FORWARD_*`
 settings in `config/config.py`. The runner selects parameter combinations
 using training-period Sharpe only, applies train-estimated inverse-vol sleeve
-weights to the following test period, reports train/test metrics and CAPM
-results, calculates parameter stability, plots rolling OOS Sharpe,
-volatility, beta, and alpha, and optionally exports CSV research tables under
-`reports/walk_forward/`.
+weights to the following test period, and evaluates the fixed production
+parameter pair on the identical OOS windows. It reports a selected-versus-
+fixed comparison, train/test metrics and CAPM results, calculates parameter
+stability, plots rolling OOS Sharpe, volatility, beta, and alpha, and exports
+structured CSV tables including `selected_results.csv` and
+`fixed_parameter_results.csv`.
 
 ## Project Structure
 
