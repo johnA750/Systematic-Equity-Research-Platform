@@ -537,6 +537,13 @@ def run_walk_forward_evaluation(
         },
         names=["path", "date"],
     ).reset_index()
+    impact_trade_details = pd.concat(
+        {
+            "selected_parameters_oos": selected_trade_details,
+            "fixed_production_oos": fixed_trade_details,
+        },
+        names=["path"],
+    ).reset_index(level=0).reset_index(drop=True)
 
     return {
         "windows": pd.DataFrame([window.as_record() for window in windows]),
@@ -551,6 +558,7 @@ def run_walk_forward_evaluation(
         "execution_costs": execution_costs,
         "capacity_summary": capacity_summary,
         "market_impact_analysis": market_impact_analysis,
+        "impact_trade_details": impact_trade_details,
     }
 
 

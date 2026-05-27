@@ -173,6 +173,9 @@ def estimate_market_impact(
     ).reset_index(names=["date", "ticker"])
     trade_details["portfolio"] = portfolio_name
     trade_details = trade_details[trade_details["trade_weight"] > 0].reset_index(drop=True)
+    trade_details["modeled_market_impact_cost"] = (
+        trade_details["trade_weight"] * trade_details["impact_rate"]
+    )
 
     capacity_summary = summarize_capacity(
         daily_analysis,
@@ -184,6 +187,160 @@ def estimate_market_impact(
         model=model,
     )
     return MarketImpactResult(applied_costs, daily_analysis, trade_details, capacity_summary)
+
+
+def _performance_attribution(returns: pd.Series) -> tuple[float, float]:
+    """Return annualized return and Sharpe for capital-sensitivity diagnostics."""
+    valid = returns.dropna()
+    if valid.empty:
+        return np.nan, np.nan
+    total_return = (1.0 + valid).prod() - 1.0
+    annualized_return = (1.0 + total_return) ** (252.0 / len(valid)) - 1.0
+    daily_volatility = valid.std()
+    sharpe = (
+        valid.mean() / daily_volatility * np.sqrt(252)
+        if not np.isclose(daily_volatility, 0.0)
+        else 0.0
+    )
+    return annualized_return, sharpe
+
+
+def compute_capacity_sensitivity(
+    weights: pd.DataFrame,
+    prices: pd.DataFrame,
+    volumes: pd.DataFrame | None,
+    slippage_only_returns: pd.Series,
+    portfolio_name: str,
+    target_dollars: float,
+    model: str = "square_root",
+    max_adv_participation: float = 0.10,
+    impact_coefficient: float = 0.10,
+    adv_lookback_window: int = 20,
+    volatility_window: int = 20,
+    capital_multipliers: tuple[float, ...] = (0.25, 0.50, 1.0, 2.0, 5.0),
+) -> pd.DataFrame:
+    """Evaluate execution degradation as modeled portfolio capital scales."""
+    base_annualized_return, base_sharpe = _performance_attribution(slippage_only_returns)
+    rows = []
+    for multiplier in capital_multipliers:
+        capital = target_dollars * multiplier
+        impact = estimate_market_impact(
+            weights,
+            prices,
+            volumes,
+            portfolio_name=portfolio_name,
+            target_dollars=capital,
+            impact_enabled=True,
+            model=model,
+            max_adv_participation=max_adv_participation,
+            impact_coefficient=impact_coefficient,
+            adv_lookback_window=adv_lookback_window,
+            volatility_window=volatility_window,
+        )
+        impact_returns = slippage_only_returns - impact.applied_costs.reindex(
+            slippage_only_returns.index
+        ).fillna(0.0)
+        annualized_return, sharpe = _performance_attribution(impact_returns)
+        summary = impact.capacity_summary.iloc[0]
+        rows.append(
+            {
+                "portfolio": portfolio_name,
+                "capital_dollars": capital,
+                "capital_multiple": multiplier,
+                "annualized_return_slippage_only": base_annualized_return,
+                "annualized_return_impact_enabled": annualized_return,
+                "return_degradation": base_annualized_return - annualized_return,
+                "sharpe_slippage_only": base_sharpe,
+                "sharpe_impact_enabled": sharpe,
+                "sharpe_degradation": base_sharpe - sharpe,
+                "modeled_market_impact_cost": summary["modeled_market_impact_cost"],
+                "average_participation_rate": summary["average_participation_rate"],
+                "maximum_participation_rate": summary["maximum_participation_rate"],
+                "average_liquidity_utilization": summary["average_liquidity_utilization"],
+                "maximum_liquidity_utilization": summary["maximum_liquidity_utilization"],
+                "participation_breach_fraction": summary["participation_breach_fraction"],
+                "estimated_capacity_dollars": summary["estimated_capacity_dollars"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def compute_path_capacity_sensitivity(
+    configured_returns: pd.Series,
+    daily_analysis: pd.DataFrame,
+    capacity_summary: pd.Series,
+    portfolio_name: str,
+    target_dollars: float,
+    impact_enabled: bool,
+    model: str,
+    capital_multipliers: tuple[float, ...] = (0.25, 0.50, 1.0, 2.0, 5.0),
+) -> pd.DataFrame:
+    """Scale a stitched realized OOS path without reconstructing selected weights."""
+    applied = daily_analysis["applied_market_impact_cost"].reindex(configured_returns.index).fillna(0.0)
+    slippage_only_returns = configured_returns + applied if impact_enabled else configured_returns.copy()
+    base_annualized_return, base_sharpe = _performance_attribution(slippage_only_returns)
+    base_cost = daily_analysis["modeled_market_impact_cost"].reindex(configured_returns.index).fillna(0.0)
+    exponent = 0.5 if model == "square_root" else 1.0
+    rows = []
+    for multiplier in capital_multipliers:
+        scaled_cost = base_cost * multiplier ** exponent
+        annualized_return, sharpe = _performance_attribution(slippage_only_returns - scaled_cost)
+        rows.append(
+            {
+                "portfolio": portfolio_name,
+                "capital_dollars": target_dollars * multiplier,
+                "capital_multiple": multiplier,
+                "annualized_return_slippage_only": base_annualized_return,
+                "annualized_return_impact_enabled": annualized_return,
+                "return_degradation": base_annualized_return - annualized_return,
+                "sharpe_slippage_only": base_sharpe,
+                "sharpe_impact_enabled": sharpe,
+                "sharpe_degradation": base_sharpe - sharpe,
+                "modeled_market_impact_cost": scaled_cost.sum(),
+                "average_participation_rate": capacity_summary["average_participation_rate"] * multiplier,
+                "maximum_participation_rate": capacity_summary["maximum_participation_rate"] * multiplier,
+                "average_liquidity_utilization": capacity_summary["average_liquidity_utilization"] * multiplier,
+                "maximum_liquidity_utilization": capacity_summary["maximum_liquidity_utilization"] * multiplier,
+                "participation_breach_fraction": np.nan,
+                "estimated_capacity_dollars": capacity_summary["estimated_capacity_dollars"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_impact_diagnostic_tables(
+    impact_result: MarketImpactResult,
+    portfolio_name: str,
+    top_n: int = 10,
+) -> dict[str, pd.DataFrame]:
+    """Create concise tables for expensive trades, impact dates, and bottlenecks."""
+    trades = impact_result.trade_details.copy()
+    daily = impact_result.daily_analysis.copy().reset_index()
+    if trades.empty:
+        empty = pd.DataFrame()
+        return {
+            "execution_dashboard_summary": impact_result.capacity_summary.copy(),
+            "most_expensive_trades": empty,
+            "highest_impact_dates": empty,
+            "liquidity_bottlenecks": empty,
+        }
+
+    expensive = trades.sort_values("modeled_market_impact_cost", ascending=False).head(top_n)
+    high_impact_dates = daily.sort_values("modeled_market_impact_cost", ascending=False).head(top_n)
+    bottlenecks = trades.sort_values("participation_rate", ascending=False).head(top_n)
+    summary = impact_result.capacity_summary.copy()
+    summary["most_expensive_trade_cost"] = expensive["modeled_market_impact_cost"].iloc[0]
+    summary["highest_impact_date"] = high_impact_dates["date"].iloc[0]
+    summary["highest_daily_impact_cost"] = high_impact_dates["modeled_market_impact_cost"].iloc[0]
+    summary["binding_liquidity_ticker"] = bottlenecks["ticker"].iloc[0]
+    summary["binding_participation_rate"] = bottlenecks["participation_rate"].iloc[0]
+    summary["portfolio"] = portfolio_name
+    return {
+        "execution_dashboard_summary": summary,
+        "most_expensive_trades": expensive,
+        "highest_impact_dates": high_impact_dates,
+        "liquidity_bottlenecks": bottlenecks,
+    }
 
 
 def build_execution_cost_report(

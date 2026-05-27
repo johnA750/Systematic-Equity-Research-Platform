@@ -1,6 +1,6 @@
 # Systematic Equity Backtesting and Research Platform
 
-A modular Python platform for testing long-only U.S. equity strategies across a fixed production baseline, a current S&P 500 research universe, and walk-forward out-of-sample validation.
+A modular Python platform for testing long-only U.S. equity strategies across a fixed production baseline, current or point-in-time S&P 500 research universes, and walk-forward out-of-sample validation.
 
 The platform keeps signal logic simple and auditable while adding portfolio construction, execution modeling, exposure analysis, factor decomposition, and reproducible experiment reporting.
 
@@ -8,7 +8,7 @@ The platform keeps signal logic simple and auditable while adding portfolio cons
 
 - Momentum and pullback-based mean reversion strategy sleeves
 - Inverse-volatility production portfolio construction with volatility targeting
-- Production 50-stock baseline and optional current S&P 500 research universe
+- Production 50-stock baseline, current S&P 500 research, and dated point-in-time membership support
 - Missing-data, price, and optional lagged average-dollar-volume eligibility filters
 - Transaction costs plus fixed, volatility-adjusted, or turnover-adjusted slippage
 - Optional ADV- and volatility-based market impact with deployable-capacity estimates
@@ -19,7 +19,9 @@ The platform keeps signal logic simple and auditable while adding portfolio cons
 
 ## Research Caveat
 
-The S&P 500 mode retrieves the current constituent list and applies it across historical returns. It is useful for testing scalability and execution realism, but it is not a survivorship-bias-free historical index-membership study. Results from that mode should be described as current-constituent research, not point-in-time index performance.
+The current S&P 500 mode retrieves today's constituent list and applies it across historical returns. It is useful for testing scalability and execution realism, but it is not a survivorship-bias-free historical index-membership study.
+
+The `HISTORICAL_SP500` framework accepts dated membership intervals and applies eligibility only on dates when each security was a supplied index member. It removes current-constituent lookahead only when populated with authoritative point-in-time membership data. Complete delisted-security return handling additionally depends on the market-data vendor returning historical and terminal event-adjusted prices; unavailable histories are reported, not silently invented.
 
 ## Strategy And Portfolio Design
 
@@ -42,6 +44,7 @@ Research features evaluate these decisions; they do not replace the production s
 | --- | --- | --- | --- |
 | Production baseline | `run_production_baseline.py` | Fixed 50-stock universe | Stable production-parameter reference run |
 | S&P 500 research | `research/run_sp500_research.py` | Current S&P 500 constituents | Scalability, liquidity, sector, and execution research |
+| Historical S&P 500 research | `research/run_historical_sp500.py` | Dated membership CSV | Point-in-time universe and survivorship-bias comparison |
 | Walk-forward validation | `research/run_walk_forward.py` | Configured validation universe | Rolling or expanding out-of-sample robustness testing |
 
 Run the modes from the repository root:
@@ -52,6 +55,10 @@ Run the modes from the repository root:
 
 # Current S&P 500 scalability research
 .\.venv\Scripts\python.exe research\run_sp500_research.py
+
+# Historical S&P 500 point-in-time research (requires membership CSV)
+$env:HISTORICAL_CONSTITUENTS_FILE = "C:\path\to\point_in_time_membership.csv"
+.\.venv\Scripts\python.exe research\run_historical_sp500.py
 
 # Walk-forward out-of-sample validation
 .\.venv\Scripts\python.exe research\run_walk_forward.py
@@ -78,7 +85,7 @@ Primary settings are in `config/config.py`. The mode definitions in `config/mode
 
 | Configuration Area | Key Settings | Purpose |
 | --- | --- | --- |
-| Universe | `USE_SP500_UNIVERSE`, `TICKERS`, `BENCHMARK_TICKER` | Choose the fixed universe or current S&P 500 constituents. |
+| Universe | `UNIVERSE_MODE`, `HISTORICAL_CONSTITUENTS_FILE`, `TICKERS`, `BENCHMARK_TICKER` | Choose `CUSTOM_UNIVERSE`, `CURRENT_SP500`, or `HISTORICAL_SP500`. |
 | Dates and strategy | `START_DATE`, `END_DATE`, `MOMENTUM_LOOKBACK`, `TOP_N`, `REBALANCE_FREQ` | Define the backtest period and existing strategy defaults. |
 | Data quality | `MAX_MISSING_DATA_FRACTION`, `MIN_STOCK_PRICE`, `DATA_DOWNLOAD_BATCH_SIZE` | Filter incomplete or impractical data and support large downloads. |
 | Liquidity | `ENABLE_LIQUIDITY_FILTER`, `MIN_AVERAGE_DOLLAR_VOLUME`, `ADV_LOOKBACK_WINDOW` | Apply lagged rolling dollar-volume eligibility when volume is available. |
@@ -90,6 +97,28 @@ Primary settings are in `config/config.py`. The mode definitions in `config/mode
 | Walk-forward | `WALK_FORWARD_MODE`, `WALK_FORWARD_TRAIN_LENGTH`, `WALK_FORWARD_TEST_LENGTH`, `WALK_FORWARD_STEP_LENGTH` | Configure out-of-sample evaluation windows. |
 
 The fixed baseline defaults preserve the original execution path. Advanced liquidity constraints, adaptive slippage, market impact charges, S&P 500 selection, and constrained optimization are research controls that can be enabled explicitly. Capacity diagnostics can still be reported while market impact charges are disabled.
+
+## Point-In-Time Constituents
+
+`data/constituents.py` provides the historical-universe framework. Configure `HISTORICAL_CONSTITUENTS_FILE` with a CSV containing one row per continuous membership interval:
+
+```csv
+ticker,entry_date,exit_date,security,sector,sub_industry,event_reason,source
+ABC,2018-06-01,2021-09-30,Example Corp,Industrials,,removed,point_in_time_provider
+XYZ,2020-01-15,,Example Holdings,Financials,,added,point_in_time_provider
+```
+
+Required columns are `ticker` and `entry_date`. `exit_date` is optional and blank for a security still active at the end of the supplied history. Dates are inclusive: a security is eligible from `entry_date` through `exit_date`, then forced out of holdings after its supplied exit.
+
+Set `HISTORICAL_CONSTITUENTS_FILE` in `config/config.py` or provide the environment variable shown above. Alternatively, set `UNIVERSE_MODE = "HISTORICAL_SP500"` and run `run_backtest.py` directly.
+
+In historical mode:
+
+- The downloaded universe is the union of all tickers in the membership history, including removed names.
+- Missing-data completeness filtering is not used to discard historical names solely because they later leave the index.
+- The daily point-in-time membership mask is combined with existing liquidity eligibility before strategy selection.
+- A survivor-only comparison holds the same strategy rules against only members active at the end of the supplied period.
+- Membership histories without returned market-data coverage are exported in `unavailable_historical_prices.csv`.
 
 ## Market Impact And Capacity
 
@@ -154,6 +183,8 @@ reports/
 |   `-- <timestamp>/
 |-- sp500_research/
 |   `-- <timestamp>/
+|-- historical_sp500_research/
+|   `-- <timestamp>/
 `-- walk_forward_validation/
     `-- <timestamp>/
 ```
@@ -163,7 +194,11 @@ Each experiment folder can contain:
 - Summary and detailed metrics tables in CSV format
 - CAPM, factor, exposure, sector, or walk-forward result tables where applicable
 - `execution_costs.csv`, `capacity_summary.csv`, and `market_impact_analysis.csv`
+- Capacity sensitivity, impact comparison, expensive-trade, impact-date, and liquidity-bottleneck tables in research modes
+- Historical-universe runs export `constituent_history.csv`, `universe_turnover.csv`, `annual_membership_changes.csv`, `survivorship_comparison.csv`, and `unavailable_historical_prices.csv`
 - `comparison_dashboard.png`, combining headline performance views for quick review
+- `execution_dashboard.png`, `capacity_curves.png`, and `impact_comparison.png` for execution-realism research modes
+- `survivorship_bias_analysis.png` for point-in-time historical-universe runs
 - Rolling performance and rolling factor exposure plots
 - `experiment_metadata.json`, recording the timestamp, universe, configuration snapshot, and execution assumptions
 
@@ -186,7 +221,8 @@ Trading-Backtester/
 |-- data/
 |   |-- loader.py                 # Historical price and volume loading
 |   |-- liquidity.py              # ADV-based eligibility filters
-|   `-- sp500.py                  # Current S&P 500 constituents and sectors
+|   |-- sp500.py                  # Current S&P 500 constituents and sectors
+|   `-- constituents.py           # Dated point-in-time membership and turnover
 |-- engine/
 |   `-- backtest.py               # Backtest orchestration
 |-- execution/
@@ -202,6 +238,7 @@ Trading-Backtester/
 |   |-- walk_forward.py           # Windowing, evaluation, and result structures
 |   |-- run_walk_forward.py       # Walk-forward comparison runner
 |   |-- run_sp500_research.py     # Current S&P 500 research runner
+|   |-- run_historical_sp500.py   # Point-in-time membership research runner
 |   |-- momentum_tuning.py        # Momentum research helpers
 |   `-- mean_reversion_tuning.py  # Mean reversion research helpers
 |-- strategies/
@@ -229,6 +266,8 @@ In the current S&P 500 research run, 503 constituents were retrieved and 487 wer
 
 - Historical equity prices and available volume data are downloaded through `yfinance`.
 - S&P 500 constituents and sectors represent the current list retrieved for the research run, not historical membership.
+- Historical S&P 500 analysis uses only the membership intervals supplied in `HISTORICAL_CONSTITUENTS_FILE`; the repository does not bundle a licensed point-in-time constituent database.
+- Delisted names remain requestable in the historical universe and are not dropped solely for post-exit missingness, but Yahoo may not provide full delisted or terminal-event return histories. Missing symbol histories are explicitly exported.
 - Missing-data and low-price filters are applied before eligible names are selected for trading.
 - Liquidity eligibility uses lagged rolling average dollar volume when volume is available, so current-day volume is not used to choose current-day positions.
 - Execution models estimate transaction costs, slippage, and liquidity-based market impact; they do not model complete institutional capacity, borrow constraints, or point-in-time corporate actions.

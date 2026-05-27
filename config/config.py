@@ -8,9 +8,17 @@ TICKERS = [
 
 BENCHMARK_TICKER = ["SPY"]
 
-# Leave disabled to retain the existing fixed-universe research baseline.
-# When enabled, current S&P 500 membership is loaded at runtime.
+# Explicit universe selection used by research runners. Mode launchers override
+# this setting with their named profile while keeping the baseline unchanged.
+UNIVERSE_MODE = "CUSTOM_UNIVERSE"
+
+# Legacy toggle retained for compatibility with earlier direct imports.
 USE_SP500_UNIVERSE = False
+
+# Point-in-time historical membership requires a dated constituent file. The
+# path can be set to a vendor- or researcher-supplied CSV matching the schema
+# documented in README.md.
+HISTORICAL_CONSTITUENTS_FILE = "data/historical_sp500_constituents.csv"
 
 START_DATE = "2020-01-01"
 END_DATE = "2023-01-01"

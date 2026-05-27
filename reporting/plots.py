@@ -153,3 +153,246 @@ def plot_rolling_factor_exposures(rolling_exposures, title_prefix="Portfolio"):
         axis.axis("off")
     fig.tight_layout()
     return fig
+
+
+def plot_execution_dashboard(
+    execution_costs,
+    market_impact_analysis,
+    cost_contributions,
+    capacity_summary,
+    title="Execution And Market Impact Dashboard",
+):
+    """Plot execution costs, impact attribution, and liquidity utilization."""
+    fig, axes = plt.subplots(2, 3, figsize=(19, 11))
+    cumulative_axis, contribution_axis, scatter_axis, participation_axis, utilization_axis, summary_axis = axes.flat
+
+    costs = execution_costs.copy()
+    if "path" in costs:
+        costs = costs[costs["path"] == costs["path"].iloc[0]]
+    costs = costs.sort_values("date") if "date" in costs else costs.sort_index()
+    dates = costs["date"] if "date" in costs else costs.index
+    for column, label in (
+        ("transaction_cost", "Transaction Cost"),
+        ("slippage_cost", "Slippage"),
+        ("modeled_market_impact_cost", "Modeled Impact"),
+    ):
+        if column in costs:
+            cumulative_axis.plot(dates, costs[column].fillna(0.0).cumsum(), label=label)
+    cumulative_axis.set_title("Cumulative Execution Costs")
+    cumulative_axis.set_ylabel("Return Cost")
+    cumulative_axis.legend(fontsize=9)
+    cumulative_axis.grid(True)
+
+    contributions = cost_contributions.copy()
+    contribution_axis.bar(
+        contributions["component"],
+        contributions["modeled_market_impact_cost"],
+        color="steelblue",
+    )
+    contribution_axis.set_title("Impact Cost Contribution")
+    contribution_axis.set_ylabel("Modeled Return Cost")
+    contribution_axis.tick_params(axis="x", rotation=25)
+    contribution_axis.grid(True, axis="y")
+
+    scatter_axis.scatter(
+        costs["turnover"],
+        costs["modeled_market_impact_cost"],
+        alpha=0.55,
+        s=20,
+    )
+    scatter_axis.set_title("Turnover Vs Impact Cost")
+    scatter_axis.set_xlabel("Daily Turnover")
+    scatter_axis.set_ylabel("Modeled Impact Cost")
+    scatter_axis.grid(True)
+
+    impact = market_impact_analysis.copy()
+    if "path" in impact:
+        impact = impact[impact["path"] == impact["path"].iloc[0]]
+    participation_axis.hist(
+        impact["maximum_participation_rate"].dropna(),
+        bins=25,
+        color="darkcyan",
+        alpha=0.8,
+    )
+    participation_axis.set_title("ADV Participation Distribution")
+    participation_axis.set_xlabel("Maximum Daily Participation")
+    participation_axis.grid(True, axis="y")
+
+    utilization_axis.hist(
+        impact["liquidity_utilization"].dropna(),
+        bins=25,
+        color="darkorange",
+        alpha=0.8,
+    )
+    utilization_axis.axvline(1.0, color="crimson", linestyle="--", label="ADV Limit")
+    utilization_axis.set_title("Liquidity Utilization Distribution")
+    utilization_axis.set_xlabel("Participation / Limit")
+    utilization_axis.legend(fontsize=9)
+    utilization_axis.grid(True, axis="y")
+
+    summary_axis.axis("off")
+    summary = capacity_summary.iloc[0]
+    lines = [
+        "Capacity Summary",
+        f"Average participation: {summary['average_participation_rate']:.2%}",
+        f"Maximum participation: {summary['maximum_participation_rate']:.2%}",
+        f"Estimated capacity: ${summary['estimated_capacity_dollars']:,.0f}",
+        f"Binding capacity: ${summary['binding_capacity_dollars']:,.0f}",
+        f"ADV breach fraction: {summary['participation_breach_fraction']:.2%}",
+        f"Modeled impact cost: {summary['modeled_market_impact_cost']:.2%}",
+    ]
+    summary_axis.text(
+        0.03,
+        0.93,
+        "\n".join(lines),
+        va="top",
+        fontsize=12,
+        linespacing=1.5,
+        bbox={"facecolor": "whitesmoke", "edgecolor": "lightgray", "pad": 12},
+    )
+    summary_axis.set_title("Headline Diagnostics")
+
+    fig.suptitle(title, fontsize=16)
+    fig.tight_layout()
+    return fig
+
+
+def plot_capacity_curves(capacity_sensitivity, title="Portfolio Capacity Sensitivity"):
+    """Plot participation, impact cost, return, and Sharpe as capital scales."""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+    data = capacity_sensitivity.sort_values("capital_dollars")
+    for portfolio, group in data.groupby("portfolio"):
+        capital_millions = group["capital_dollars"] / 1_000_000.0
+        axes[0, 0].plot(capital_millions, group["maximum_participation_rate"], marker="o", label=portfolio)
+        axes[0, 1].plot(capital_millions, group["modeled_market_impact_cost"], marker="o", label=portfolio)
+        axes[1, 0].plot(capital_millions, group["annualized_return_impact_enabled"], marker="o", label=portfolio)
+        axes[1, 1].plot(capital_millions, group["sharpe_impact_enabled"], marker="o", label=portfolio)
+    axes[0, 0].set_title("Maximum ADV Participation")
+    axes[0, 0].set_ylabel("Participation Rate")
+    axes[0, 1].set_title("Modeled Market Impact Cost")
+    axes[0, 1].set_ylabel("Return Cost")
+    axes[1, 0].set_title("Annualized Return After Impact")
+    axes[1, 0].set_ylabel("Annualized Return")
+    axes[1, 1].set_title("Sharpe After Impact")
+    axes[1, 1].set_ylabel("Sharpe Ratio")
+    for axis in axes.flat:
+        axis.set_xlabel("Capital ($ millions)")
+        axis.grid(True)
+        axis.legend(fontsize=8)
+    fig.suptitle(title, fontsize=16)
+    fig.tight_layout()
+    return fig
+
+
+def plot_impact_comparison(
+    comparison_table,
+    cumulative_paths=None,
+    title="Execution Realism Comparison",
+):
+    """Compare execution scenarios and, when supplied, their cumulative paths."""
+    fig, axes = plt.subplots(1, 3, figsize=(19, 6))
+    paths_axis, return_axis, sharpe_axis = axes
+    if cumulative_paths:
+        for label, values in cumulative_paths.items():
+            paths_axis.plot(values.index, values.values, label=label, linewidth=2)
+        paths_axis.legend(fontsize=9)
+    paths_axis.set_title("Cumulative Value By Execution Scenario")
+    paths_axis.set_ylabel("Growth Of $1")
+    paths_axis.grid(True)
+
+    table = comparison_table.copy()
+    return_axis.bar(table["scenario"], table["annualized_return"], color="steelblue")
+    return_axis.set_title("Annualized Return Comparison")
+    return_axis.set_ylabel("Annualized Return")
+    return_axis.tick_params(axis="x", rotation=25)
+    return_axis.grid(True, axis="y")
+
+    sharpe_axis.bar(table["scenario"], table["sharpe"], color="darkorange")
+    sharpe_axis.set_title("Sharpe Comparison")
+    sharpe_axis.set_ylabel("Sharpe Ratio")
+    sharpe_axis.tick_params(axis="x", rotation=25)
+    sharpe_axis.grid(True, axis="y")
+    fig.suptitle(title, fontsize=16)
+    fig.tight_layout()
+    return fig
+
+
+def plot_survivorship_bias_analysis(
+    point_in_time_cumulative,
+    survivor_only_cumulative,
+    universe_turnover,
+    survivorship_comparison,
+    title="Survivorship Bias Analysis",
+):
+    """Plot point-in-time versus survivor-only performance and membership changes."""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+    cumulative_axis, spread_axis, changes_axis, summary_axis = axes.flat
+
+    cumulative_axis.plot(
+        point_in_time_cumulative.index,
+        point_in_time_cumulative.values,
+        label="Point-In-Time Membership",
+        linewidth=2,
+    )
+    cumulative_axis.plot(
+        survivor_only_cumulative.index,
+        survivor_only_cumulative.values,
+        label="End-Date Survivors Only",
+        linewidth=2,
+    )
+    cumulative_axis.set_title("Cumulative Value Comparison")
+    cumulative_axis.set_ylabel("Growth Of $1")
+    cumulative_axis.legend()
+    cumulative_axis.grid(True)
+
+    aligned = survivor_only_cumulative.reindex(point_in_time_cumulative.index).ffill()
+    spread_axis.plot(
+        point_in_time_cumulative.index,
+        aligned - point_in_time_cumulative,
+        color="darkorange",
+        linewidth=2,
+    )
+    spread_axis.axhline(0.0, color="gray", linewidth=1)
+    spread_axis.set_title("Survivor-Only Value Minus Point-In-Time")
+    spread_axis.set_ylabel("Cumulative Value Difference")
+    spread_axis.grid(True)
+
+    annual = universe_turnover.copy()
+    annual["year"] = annual["date"].dt.year
+    annual = annual.groupby("year", as_index=False)[["additions", "removals"]].sum()
+    changes_axis.bar(annual["year"] - 0.18, annual["additions"], width=0.36, label="Additions")
+    changes_axis.bar(annual["year"] + 0.18, annual["removals"], width=0.36, label="Removals")
+    changes_axis.set_title("Annual Membership Changes")
+    changes_axis.set_ylabel("Securities")
+    changes_axis.legend()
+    changes_axis.grid(True, axis="y")
+
+    point_row = survivorship_comparison[
+        survivorship_comparison["universe"] == "point_in_time_membership"
+    ].iloc[0]
+    survivor_row = survivorship_comparison[
+        survivorship_comparison["universe"] == "end_date_survivors_only"
+    ].iloc[0]
+    summary_axis.axis("off")
+    lines = [
+        "Estimated Survivorship Effect",
+        f"Point-in-time ann. return: {point_row['Annualized Return']:.2%}",
+        f"Survivor-only ann. return: {survivor_row['Annualized Return']:.2%}",
+        f"Return bias: {survivor_row['annualized_return_bias_vs_point_in_time']:.2%}",
+        f"Point-in-time Sharpe: {point_row['Sharpe Ratio']:.2f}",
+        f"Survivor-only Sharpe: {survivor_row['Sharpe Ratio']:.2f}",
+        f"Sharpe bias: {survivor_row['sharpe_bias_vs_point_in_time']:.2f}",
+    ]
+    summary_axis.text(
+        0.05,
+        0.9,
+        "\n".join(lines),
+        va="top",
+        fontsize=12,
+        linespacing=1.5,
+        bbox={"facecolor": "whitesmoke", "edgecolor": "lightgray", "pad": 12},
+    )
+    summary_axis.set_title("Summary")
+    fig.suptitle(title, fontsize=16)
+    fig.tight_layout()
+    return fig

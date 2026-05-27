@@ -8,6 +8,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analytics.rolling import compute_rolling_performance
 from analytics.factors import run_factor_model_suite, compute_rolling_factor_exposures
+from analytics.metrics import compute_performance_metrics
+from analytics.performance import compute_cumulative_returns
 from config.modes import WALK_FORWARD_VALIDATION
 from config.config import (
     TICKERS,
@@ -58,7 +60,14 @@ from data.liquidity import build_liquidity_eligibility_mask
 from data.loader import clean_price_data, load_market_data, load_price_data
 from data.sp500 import get_sp500_constituents
 from analytics.returns import compute_daily_returns
-from reporting.plots import plot_rolling_factor_exposures, plot_rolling_performance
+from execution.market_impact import compute_path_capacity_sensitivity
+from reporting.plots import (
+    plot_capacity_curves,
+    plot_execution_dashboard,
+    plot_impact_comparison,
+    plot_rolling_factor_exposures,
+    plot_rolling_performance,
+)
 from reporting.experiments import (
     create_experiment_directory,
     save_figures,
@@ -210,6 +219,66 @@ def main():
     results["rolling_metrics"] = selected_rolling_metrics
     results["fixed_rolling_metrics"] = fixed_rolling_metrics
 
+    scenario_returns = {}
+    scenario_rows = []
+    sensitivity_rows = []
+    for path, returns_series in (
+        ("selected_parameters_oos", results["oos_returns"]),
+        ("fixed_production_oos", results["fixed_oos_returns"]),
+    ):
+        analysis = results["market_impact_analysis"][
+            results["market_impact_analysis"]["path"] == path
+        ].set_index("date")
+        applied_cost = analysis["applied_market_impact_cost"].reindex(returns_series.index).fillna(0.0)
+        modeled_cost = analysis["modeled_market_impact_cost"].reindex(returns_series.index).fillna(0.0)
+        slippage_only = returns_series + applied_cost if ENABLE_MARKET_IMPACT else returns_series.copy()
+        impact_enabled = slippage_only - modeled_cost
+        for label, scenario_returns_series in (
+            (f"{path} slippage only", slippage_only),
+            (f"{path} impact enabled", impact_enabled),
+        ):
+            metrics = compute_performance_metrics(scenario_returns_series)
+            scenario_rows.append(
+                {
+                    "scenario": label,
+                    "annualized_return": metrics["Annualized Return"],
+                    "sharpe": metrics["Sharpe Ratio"],
+                    "max_drawdown": metrics["Max Drawdown"],
+                }
+            )
+            scenario_returns[label] = compute_cumulative_returns(scenario_returns_series)
+        path_capacity = results["capacity_summary"][
+            results["capacity_summary"]["portfolio"] == path
+        ].iloc[0]
+        sensitivity_rows.append(
+            compute_path_capacity_sensitivity(
+                returns_series,
+                analysis,
+                path_capacity,
+                portfolio_name=path,
+                target_dollars=CAPACITY_TARGET_DOLLARS,
+                impact_enabled=ENABLE_MARKET_IMPACT,
+                model=MARKET_IMPACT_MODEL,
+            )
+        )
+    results["capacity_sensitivity"] = pd.concat(sensitivity_rows, ignore_index=True)
+    results["impact_comparison"] = pd.DataFrame(scenario_rows)
+    results["impact_cost_contribution"] = (
+        results["market_impact_analysis"]
+        .groupby("path", as_index=False)["modeled_market_impact_cost"]
+        .sum()
+        .rename(columns={"path": "component"})
+    )
+    results["most_expensive_trades"] = results["impact_trade_details"].sort_values(
+        "modeled_market_impact_cost", ascending=False
+    ).head(10)
+    results["highest_impact_dates"] = results["market_impact_analysis"].sort_values(
+        "modeled_market_impact_cost", ascending=False
+    ).head(10)
+    results["liquidity_bottlenecks"] = results["impact_trade_details"].sort_values(
+        "participation_rate", ascending=False
+    ).head(10)
+
     factor_summary = pd.DataFrame()
     rolling_factor_exposures = pd.DataFrame()
     factor_analysis_error = None
@@ -289,6 +358,18 @@ def main():
         "applied_market_impact_cost",
     ]
     print(results["capacity_summary"][capacity_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+    top_trade = results["most_expensive_trades"].iloc[0]
+    top_date = results["highest_impact_dates"].iloc[0]
+    bottleneck = results["liquidity_bottlenecks"].iloc[0]
+    print(
+        f"Highest modeled impact: {top_date['path']} on {top_date['date'].date()} "
+        f"({top_date['modeled_market_impact_cost']:.4%}); "
+        f"costliest trade {top_trade['ticker']} ({top_trade['modeled_market_impact_cost']:.4%})"
+    )
+    print(
+        f"Liquidity bottleneck: {bottleneck['ticker']} on {bottleneck['date'].date()} "
+        f"at {bottleneck['participation_rate']:.2%} ADV participation"
+    )
 
     if not factor_summary.empty:
         print("\nFama-French 3-Factor OOS Summary:")
@@ -315,6 +396,22 @@ def main():
 
     selected_figure = plot_rolling_performance(selected_rolling_metrics, title_prefix="Selected OOS")
     fixed_figure = plot_rolling_performance(fixed_rolling_metrics, title_prefix="Fixed Production OOS")
+    execution_dashboard = plot_execution_dashboard(
+        results["execution_costs"],
+        results["market_impact_analysis"],
+        results["impact_cost_contribution"],
+        results["capacity_summary"].iloc[[0]],
+        title="Walk-Forward OOS Execution Dashboard",
+    )
+    capacity_curves = plot_capacity_curves(
+        results["capacity_sensitivity"],
+        title="Walk-Forward OOS Capacity Sensitivity",
+    )
+    impact_comparison = plot_impact_comparison(
+        results["impact_comparison"],
+        cumulative_paths=scenario_returns,
+        title="Walk-Forward Slippage Vs Impact Comparison",
+    )
     factor_figures = {}
     if not rolling_factor_exposures.empty:
         factor_figures["selected_rolling_factor_exposures"] = plot_rolling_factor_exposures(
@@ -334,6 +431,9 @@ def main():
                 {
                     "selected_rolling_performance": selected_figure,
                     "fixed_production_rolling_performance": fixed_figure,
+                    "execution_dashboard": execution_dashboard,
+                    "capacity_curves": capacity_curves,
+                    "impact_comparison": impact_comparison,
                     **factor_figures,
                 },
             )
