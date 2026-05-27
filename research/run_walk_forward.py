@@ -28,6 +28,11 @@ from config.config import (
     SLIPPAGE_VOLATILITY_WINDOW,
     SLIPPAGE_VOLATILITY_REFERENCE,
     SLIPPAGE_TURNOVER_MULTIPLIER,
+    ENABLE_MARKET_IMPACT,
+    MARKET_IMPACT_MODEL,
+    MAX_ADV_PARTICIPATION,
+    IMPACT_COEFFICIENT,
+    CAPACITY_TARGET_DOLLARS,
     WALK_FORWARD_MODE,
     WALK_FORWARD_TRAIN_LENGTH,
     WALK_FORWARD_TEST_LENGTH,
@@ -80,21 +85,12 @@ def load_research_data():
         universe_tickers = TICKERS
         universe_name = "Configured ticker list"
 
-    if ENABLE_LIQUIDITY_FILTER:
-        prices, volumes = load_market_data(
-            universe_tickers,
-            START_DATE,
-            END_DATE,
-            batch_size=DATA_DOWNLOAD_BATCH_SIZE,
-        )
-    else:
-        prices = load_price_data(
-            universe_tickers,
-            START_DATE,
-            END_DATE,
-            batch_size=DATA_DOWNLOAD_BATCH_SIZE,
-        )
-        volumes = pd.DataFrame()
+    prices, volumes = load_market_data(
+        universe_tickers,
+        START_DATE,
+        END_DATE,
+        batch_size=DATA_DOWNLOAD_BATCH_SIZE,
+    )
 
     prices = clean_price_data(
         prices,
@@ -121,6 +117,7 @@ def load_research_data():
     benchmark_returns = compute_daily_returns(benchmark_prices_df).iloc[:, 0]
     return (
         prices,
+        volumes.reindex(index=prices.index, columns=prices.columns),
         compute_daily_returns(prices),
         benchmark_prices,
         benchmark_returns,
@@ -133,6 +130,7 @@ def load_research_data():
 def main():
     (
         prices,
+        volumes,
         returns,
         benchmark_prices,
         benchmark_returns,
@@ -160,6 +158,7 @@ def main():
 
     results = run_walk_forward_evaluation(
         prices=prices,
+        volumes=volumes,
         returns=returns,
         benchmark_prices=benchmark_prices,
         benchmark_returns=benchmark_returns,
@@ -178,6 +177,15 @@ def main():
             "volatility_window": SLIPPAGE_VOLATILITY_WINDOW,
             "volatility_reference": SLIPPAGE_VOLATILITY_REFERENCE,
             "turnover_multiplier": SLIPPAGE_TURNOVER_MULTIPLIER,
+        },
+        market_impact_settings={
+            "target_dollars": CAPACITY_TARGET_DOLLARS,
+            "impact_enabled": ENABLE_MARKET_IMPACT,
+            "model": MARKET_IMPACT_MODEL,
+            "max_adv_participation": MAX_ADV_PARTICIPATION,
+            "impact_coefficient": IMPACT_COEFFICIENT,
+            "adv_lookback_window": ADV_LOOKBACK_WINDOW,
+            "volatility_window": SLIPPAGE_VOLATILITY_WINDOW,
         },
         fixed_momentum_params=PRODUCTION_MOMENTUM_PARAMS,
         fixed_meanrev_params=PRODUCTION_MEAN_REVERSION_PARAMS,
@@ -271,6 +279,17 @@ def main():
     print("\nSelected vs Fixed Production OOS Comparison:")
     print(results["path_comparison"].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
+    impact_status = "enabled" if ENABLE_MARKET_IMPACT else "disabled"
+    print(f"\nMarket Impact And Capacity ({impact_status}; {MARKET_IMPACT_MODEL} model):")
+    capacity_columns = [
+        "portfolio",
+        "estimated_capacity_dollars",
+        "average_participation_rate",
+        "maximum_participation_rate",
+        "applied_market_impact_cost",
+    ]
+    print(results["capacity_summary"][capacity_columns].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+
     if not factor_summary.empty:
         print("\nFama-French 3-Factor OOS Summary:")
         ff3 = factor_summary[factor_summary["model"] == "FF3"]
@@ -291,6 +310,8 @@ def main():
         if not factor_summary.empty:
             print("\nDetailed Factor Decomposition:")
             print(factor_summary.to_string(index=False, float_format=lambda x: f"{x:.6f}"))
+        print("\nDetailed Capacity Summary:")
+        print(results["capacity_summary"].to_string(index=False, float_format=lambda x: f"{x:.6f}"))
 
     selected_figure = plot_rolling_performance(selected_rolling_metrics, title_prefix="Selected OOS")
     fixed_figure = plot_rolling_performance(fixed_rolling_metrics, title_prefix="Fixed Production OOS")
@@ -332,6 +353,11 @@ def main():
                 "transaction_cost": TRANSACTION_COST,
                 "slippage_model": SLIPPAGE_MODEL,
                 "slippage_bps": SLIPPAGE_BPS,
+                "market_impact_enabled": ENABLE_MARKET_IMPACT,
+                "market_impact_model": MARKET_IMPACT_MODEL,
+                "capacity_target_dollars": CAPACITY_TARGET_DOLLARS,
+                "max_adv_participation": MAX_ADV_PARTICIPATION,
+                "impact_coefficient": IMPACT_COEFFICIENT,
                 "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
                 "max_position_weight": MAX_POSITION_WEIGHT,
                 "factor_analysis_enabled": ENABLE_FACTOR_ANALYSIS,

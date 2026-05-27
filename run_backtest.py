@@ -26,6 +26,11 @@ from config.config import (
     SLIPPAGE_VOLATILITY_WINDOW,
     SLIPPAGE_VOLATILITY_REFERENCE,
     SLIPPAGE_TURNOVER_MULTIPLIER,
+    ENABLE_MARKET_IMPACT,
+    MARKET_IMPACT_MODEL,
+    MAX_ADV_PARTICIPATION,
+    IMPACT_COEFFICIENT,
+    CAPACITY_TARGET_DOLLARS,
     ENABLE_CONSTRAINED_OPTIMIZER,
     OPTIMIZER_MAX_WEIGHT,
     REPORT_ROOT,
@@ -63,7 +68,8 @@ from analytics.regime_analysis import (
     compute_regime_metrics,
     print_regime_metrics,
 )
-from execution.slippage import apply_execution_slippage
+from execution.slippage import apply_execution_slippage, compute_slippage_costs
+from execution.market_impact import estimate_market_impact, build_execution_cost_report
 from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
@@ -119,21 +125,12 @@ else:
     universe_tickers = TICKERS
     sector_map = {}
 
-if ENABLE_LIQUIDITY_FILTER:
-    prices, volumes = load_market_data(
-        universe_tickers,
-        START_DATE,
-        END_DATE,
-        batch_size=DATA_DOWNLOAD_BATCH_SIZE,
-    )
-else:
-    prices = load_price_data(
-        universe_tickers,
-        START_DATE,
-        END_DATE,
-        batch_size=DATA_DOWNLOAD_BATCH_SIZE,
-    )
-    volumes = pd.DataFrame()
+prices, volumes = load_market_data(
+    universe_tickers,
+    START_DATE,
+    END_DATE,
+    batch_size=DATA_DOWNLOAD_BATCH_SIZE,
+)
 
 prices = clean_price_data(
     prices,
@@ -232,6 +229,15 @@ momentum_returns = apply_execution_slippage(
     volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
     turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
 )
+momentum_slippage_costs = compute_slippage_costs(
+    momentum_returns_gross,
+    momentum_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+    model=SLIPPAGE_MODEL,
+    volatility_window=SLIPPAGE_VOLATILITY_WINDOW,
+    volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
+    turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
+)
 
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
 momentum_metrics = compute_performance_metrics(momentum_returns)
@@ -270,6 +276,15 @@ meanrev_returns = apply_execution_slippage(
     volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
     turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
 )
+meanrev_slippage_costs = compute_slippage_costs(
+    meanrev_returns_gross,
+    meanrev_turnover,
+    slippage_bps=SLIPPAGE_BPS,
+    model=SLIPPAGE_MODEL,
+    volatility_window=SLIPPAGE_VOLATILITY_WINDOW,
+    volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
+    turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
+)
 
 meanrev_cumulative = compute_cumulative_returns(meanrev_returns)
 meanrev_metrics = compute_performance_metrics(meanrev_returns)
@@ -289,22 +304,51 @@ weight_sum = inv_vol_mom + inv_vol_mr
 base_mom_weight = inv_vol_mom / weight_sum if weight_sum != 0 else 0.5
 base_mr_weight = inv_vol_mr / weight_sum if weight_sum != 0 else 0.5
 
-combined_returns = base_mom_weight * momentum_returns + base_mr_weight * meanrev_returns
-combined_returns.name = "combined_inverse_vol"
-
-combined_cumulative = compute_cumulative_returns(combined_returns)
-combined_metrics = compute_performance_metrics(combined_returns)
-combined_drawdown = compute_drawdown_series(combined_cumulative)
-
 combined_turnover = (
-    base_mom_weight * momentum_turnover.reindex(combined_returns.index).fillna(0.0)
-    + base_mr_weight * meanrev_turnover.reindex(combined_returns.index).fillna(0.0)
+    base_mom_weight * momentum_turnover.reindex(returns.index).fillna(0.0)
+    + base_mr_weight * meanrev_turnover.reindex(returns.index).fillna(0.0)
 )
-combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 combined_weights = (
     base_mom_weight * momentum_weights
     + base_mr_weight * meanrev_weights
 )
+combined_pre_impact_returns = base_mom_weight * momentum_returns + base_mr_weight * meanrev_returns
+combined_transaction_costs = TRANSACTION_COST * combined_turnover
+combined_slippage_costs = (
+    base_mom_weight * momentum_slippage_costs.reindex(combined_pre_impact_returns.index).fillna(0.0)
+    + base_mr_weight * meanrev_slippage_costs.reindex(combined_pre_impact_returns.index).fillna(0.0)
+)
+market_impact_result = estimate_market_impact(
+    combined_weights,
+    prices,
+    volumes.reindex(index=prices.index, columns=prices.columns),
+    portfolio_name="combined_inverse_vol",
+    target_dollars=CAPACITY_TARGET_DOLLARS,
+    impact_enabled=ENABLE_MARKET_IMPACT,
+    model=MARKET_IMPACT_MODEL,
+    max_adv_participation=MAX_ADV_PARTICIPATION,
+    impact_coefficient=IMPACT_COEFFICIENT,
+    adv_lookback_window=ADV_LOOKBACK_WINDOW,
+    volatility_window=SLIPPAGE_VOLATILITY_WINDOW,
+)
+combined_returns = combined_pre_impact_returns - market_impact_result.applied_costs.reindex(
+    combined_pre_impact_returns.index
+).fillna(0.0)
+combined_returns.name = "combined_inverse_vol"
+execution_costs = build_execution_cost_report(
+    combined_turnover,
+    combined_transaction_costs,
+    combined_slippage_costs,
+    market_impact_result,
+    portfolio_name="combined_inverse_vol",
+)
+capacity_summary = market_impact_result.capacity_summary
+market_impact_analysis = market_impact_result.daily_analysis
+
+combined_cumulative = compute_cumulative_returns(combined_returns)
+combined_metrics = compute_performance_metrics(combined_returns)
+combined_drawdown = compute_drawdown_series(combined_cumulative)
+combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
 combined_exposure_metrics = summarize_gross_exposure(combined_weights)
 combined_gross_exposure = compute_gross_exposure(combined_weights)
 combined_sector_exposure = summarize_sector_exposures(combined_weights, sector_map)
@@ -424,6 +468,17 @@ combined_vol_regime = compute_regime_metrics(
 # Print metrics
 # =========================
 print(f"Execution: {SLIPPAGE_MODEL} slippage ({SLIPPAGE_BPS:.2f} base bps)")
+capacity_row = capacity_summary.iloc[0]
+impact_status = "enabled" if ENABLE_MARKET_IMPACT else "disabled"
+if capacity_row["liquidity_data_available"]:
+    print(
+        f"Market Impact: {impact_status} ({MARKET_IMPACT_MODEL}; "
+        f"${CAPACITY_TARGET_DOLLARS:,.0f} target; "
+        f"estimated capacity ${capacity_row['estimated_capacity_dollars']:,.0f}; "
+        f"ADV breaches {capacity_row['participation_breach_fraction']:.2%})"
+    )
+else:
+    print(f"Market Impact: {impact_status}; volume unavailable for capacity diagnostics")
 
 print("\nInverse-Vol Combined Strategy Metrics:")
 for key, value in combined_metrics.items():
@@ -517,6 +572,13 @@ if VERBOSE:
     print("\nInverse-Vol Combined Turnover Metrics:")
     for key, value in combined_turnover_metrics.items():
         print(f"{key}: {value:.4f}")
+
+    print("\nMarket Impact And Capacity Diagnostics:")
+    print(capacity_summary.to_string(index=False, float_format=lambda value: f"{value:.6f}"))
+    print(
+        f"Turnover-Adjusted Total Execution Cost: "
+        f"{execution_costs['total_execution_cost'].sum() / combined_turnover.sum():.6f}"
+    )
 
     print(f"\nAverage Vol-Target Leverage: {leverage_series.mean():.4f}")
     print(f"Max Vol-Target Leverage: {leverage_series.max():.4f}")
@@ -645,6 +707,9 @@ if SAVE_REPORTS:
             ],
             axis=1,
         ).reset_index(names="date"),
+        "execution_costs": execution_costs.reset_index(),
+        "capacity_summary": capacity_summary,
+        "market_impact_analysis": market_impact_analysis.reset_index(),
     }
     if not combined_sector_exposure.empty:
         tables["combined_inverse_vol_sector_exposure"] = combined_sector_exposure.reset_index(names="sector")
@@ -671,6 +736,11 @@ if SAVE_REPORTS:
             "transaction_cost": TRANSACTION_COST,
             "slippage_model": SLIPPAGE_MODEL,
             "slippage_bps": SLIPPAGE_BPS,
+            "market_impact_enabled": ENABLE_MARKET_IMPACT,
+            "market_impact_model": MARKET_IMPACT_MODEL,
+            "capacity_target_dollars": CAPACITY_TARGET_DOLLARS,
+            "max_adv_participation": MAX_ADV_PARTICIPATION,
+            "impact_coefficient": IMPACT_COEFFICIENT,
             "liquidity_filter": ENABLE_LIQUIDITY_FILTER,
             "max_position_weight": MAX_POSITION_WEIGHT,
             "factor_analysis_enabled": ENABLE_FACTOR_ANALYSIS,

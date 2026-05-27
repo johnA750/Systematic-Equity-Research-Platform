@@ -11,6 +11,7 @@ The platform keeps signal logic simple and auditable while adding portfolio cons
 - Production 50-stock baseline and optional current S&P 500 research universe
 - Missing-data, price, and optional lagged average-dollar-volume eligibility filters
 - Transaction costs plus fixed, volatility-adjusted, or turnover-adjusted slippage
+- Optional ADV- and volatility-based market impact with deployable-capacity estimates
 - Position caps, turnover tracking, gross exposure, drawdown, and sector exposure reporting
 - CAPM and Fama-French 3-factor / optional 5-factor attribution with rolling exposures
 - Rolling or expanding walk-forward validation comparing selected parameters with fixed production parameters
@@ -31,7 +32,7 @@ The production strategy behavior remains intentionally stable:
 | Portfolio construction | Combines sleeves using inverse-volatility weights by default. |
 | Volatility control | Applies portfolio-level volatility targeting. |
 | Risk controls | Optional maximum position weight and gross exposure reporting. |
-| Execution | Transaction costs and configurable slippage models applied to turnover. |
+| Execution | Transaction costs, configurable slippage, and optional market impact applied to observed trades. |
 
 Research features evaluate these decisions; they do not replace the production signal logic or production parameter defaults.
 
@@ -83,11 +84,25 @@ Primary settings are in `config/config.py`. The mode definitions in `config/mode
 | Liquidity | `ENABLE_LIQUIDITY_FILTER`, `MIN_AVERAGE_DOLLAR_VOLUME`, `ADV_LOOKBACK_WINDOW` | Apply lagged rolling dollar-volume eligibility when volume is available. |
 | Position risk | `MAX_POSITION_WEIGHT` | Optionally cap individual position weights. |
 | Execution | `TRANSACTION_COST`, `SLIPPAGE_MODEL`, `SLIPPAGE_BPS` | Control transaction costs and fixed or adaptive slippage assumptions. |
+| Market impact | `ENABLE_MARKET_IMPACT`, `MARKET_IMPACT_MODEL`, `MAX_ADV_PARTICIPATION`, `IMPACT_COEFFICIENT`, `CAPACITY_TARGET_DOLLARS` | Estimate trade-size impact and constrain capacity assumptions against lagged ADV. |
 | Reporting | `SAVE_REPORTS`, `SAVE_PLOTS`, `SAVE_INDIVIDUAL_PLOTS`, `VERBOSE_ANALYTICS` | Control exported artifacts and console detail. |
 | Factor analysis | `ENABLE_FACTOR_ANALYSIS`, `ENABLE_FF5_ANALYSIS`, `FACTOR_FREQUENCY`, `FACTOR_ROLLING_WINDOW` | Configure attribution and rolling exposure reporting. |
 | Walk-forward | `WALK_FORWARD_MODE`, `WALK_FORWARD_TRAIN_LENGTH`, `WALK_FORWARD_TEST_LENGTH`, `WALK_FORWARD_STEP_LENGTH` | Configure out-of-sample evaluation windows. |
 
-The fixed baseline defaults preserve the original execution path. Advanced liquidity constraints, adaptive slippage, S&P 500 selection, and constrained optimization are research controls that can be enabled explicitly.
+The fixed baseline defaults preserve the original execution path. Advanced liquidity constraints, adaptive slippage, market impact charges, S&P 500 selection, and constrained optimization are research controls that can be enabled explicitly. Capacity diagnostics can still be reported while market impact charges are disabled.
+
+## Market Impact And Capacity
+
+`execution/market_impact.py` models rebalance trades as portfolio-weight changes multiplied by `CAPACITY_TARGET_DOLLARS`. Each trade is evaluated against lagged rolling average dollar volume and lagged realized volatility, keeping the execution estimate free from same-day liquidity lookahead.
+
+Two optional impact specifications are available:
+
+| Model | Impact Rate |
+| --- | --- |
+| `square_root` | `IMPACT_COEFFICIENT * realized_volatility * sqrt(participation_rate)` |
+| `linear` | `IMPACT_COEFFICIENT * realized_volatility * participation_rate` |
+
+Participation rate is traded dollars divided by lagged ADV. Estimated capacity is reported as a conservative lower-tail capital level at which trade participation reaches `MAX_ADV_PARTICIPATION`; a binding minimum capacity estimate and breach frequency are also exported. When `ENABLE_MARKET_IMPACT = False`, modeled costs and capacity remain visible for research, but zero market impact is deducted from returns.
 
 ## Walk-Forward Research
 
@@ -147,6 +162,7 @@ Each experiment folder can contain:
 
 - Summary and detailed metrics tables in CSV format
 - CAPM, factor, exposure, sector, or walk-forward result tables where applicable
+- `execution_costs.csv`, `capacity_summary.csv`, and `market_impact_analysis.csv`
 - `comparison_dashboard.png`, combining headline performance views for quick review
 - Rolling performance and rolling factor exposure plots
 - `experiment_metadata.json`, recording the timestamp, universe, configuration snapshot, and execution assumptions
@@ -174,7 +190,8 @@ Trading-Backtester/
 |-- engine/
 |   `-- backtest.py               # Backtest orchestration
 |-- execution/
-|   `-- slippage.py               # Fixed and optional adaptive slippage models
+|   |-- slippage.py               # Fixed and optional adaptive slippage models
+|   `-- market_impact.py          # ADV participation and capacity diagnostics
 |-- portfolio/
 |   |-- optimization.py           # Optional research-only constrained optimizer
 |   `-- vol_targeting.py          # Volatility targeting utilities
@@ -214,7 +231,7 @@ In the current S&P 500 research run, 503 constituents were retrieved and 487 wer
 - S&P 500 constituents and sectors represent the current list retrieved for the research run, not historical membership.
 - Missing-data and low-price filters are applied before eligible names are selected for trading.
 - Liquidity eligibility uses lagged rolling average dollar volume when volume is available, so current-day volume is not used to choose current-day positions.
-- Execution models estimate transaction costs and slippage; they do not model complete institutional capacity, borrow constraints, or point-in-time corporate actions.
+- Execution models estimate transaction costs, slippage, and liquidity-based market impact; they do not model complete institutional capacity, borrow constraints, or point-in-time corporate actions.
 - Factor models are attribution tools and do not feed into strategy signals or portfolio optimization by default.
 
 ## Scope

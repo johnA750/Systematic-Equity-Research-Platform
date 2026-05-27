@@ -7,7 +7,12 @@ import pandas as pd
 from analytics.factor_regression import run_capm_regression
 from analytics.metrics import compute_performance_metrics
 from engine.backtest import run_backtest
-from execution.slippage import apply_execution_slippage
+from execution.slippage import apply_execution_slippage, compute_slippage_costs
+from execution.market_impact import (
+    build_execution_cost_report,
+    estimate_market_impact,
+    summarize_capacity,
+)
 from portfolio.regime import compute_regime_multiplier
 from strategies.mean_reversion import generate_mean_reversion_weights
 from strategies.momentum import generate_momentum_weights
@@ -113,6 +118,7 @@ def _capm_columns(
 
 def evaluate_parameter_pair(
     prices: pd.DataFrame,
+    volumes: pd.DataFrame,
     returns: pd.DataFrame,
     benchmark_prices: pd.Series,
     benchmark_returns: pd.Series,
@@ -124,12 +130,14 @@ def evaluate_parameter_pair(
     transaction_cost: float,
     max_position_weight: float | None,
     slippage_settings: dict,
+    market_impact_settings: dict,
     capm_use_hac: bool = True,
     capm_hac_lags: int = 5,
-) -> tuple[dict, pd.Series]:
+) -> tuple[dict, pd.Series, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Evaluate one strategy parameter pair using train-selected sleeve allocation."""
     context_end = window.test_dates[-1]
     context_prices = prices.loc[:context_end]
+    context_volumes = volumes.reindex(index=context_prices.index, columns=context_prices.columns)
     context_returns = returns.reindex(context_prices.index)
     context_benchmark_prices = benchmark_prices.reindex(context_prices.index).ffill()
     context_eligibility = (
@@ -163,6 +171,11 @@ def evaluate_parameter_pair(
         momentum_turnover,
         **slippage_settings,
     )
+    momentum_slippage_costs = compute_slippage_costs(
+        momentum_gross,
+        momentum_turnover,
+        **slippage_settings,
+    )
 
     meanrev_weights = generate_mean_reversion_weights(
         context_prices,
@@ -181,6 +194,11 @@ def evaluate_parameter_pair(
         meanrev_turnover,
         **slippage_settings,
     )
+    meanrev_slippage_costs = compute_slippage_costs(
+        meanrev_gross,
+        meanrev_turnover,
+        **slippage_settings,
+    )
 
     train_dates = window.train_dates.intersection(returns.index)
     test_dates = window.test_dates.intersection(returns.index)
@@ -188,10 +206,33 @@ def evaluate_parameter_pair(
         momentum_net.reindex(train_dates).fillna(0.0),
         meanrev_net.reindex(train_dates).fillna(0.0),
     )
-    combined = (
+    combined_pre_impact = (
         momentum_allocation * momentum_net
         + meanrev_allocation * meanrev_net
     )
+    combined_weights = (
+        momentum_allocation * momentum_weights
+        + meanrev_allocation * meanrev_weights
+    )
+    combined_turnover = (
+        momentum_allocation * momentum_turnover
+        + meanrev_allocation * meanrev_turnover
+    )
+    combined_transaction_costs = combined_turnover * transaction_cost
+    combined_slippage_costs = (
+        momentum_allocation * momentum_slippage_costs
+        + meanrev_allocation * meanrev_slippage_costs
+    )
+    market_impact = estimate_market_impact(
+        combined_weights,
+        context_prices,
+        context_volumes,
+        portfolio_name="combined_inverse_vol",
+        **market_impact_settings,
+    )
+    combined = combined_pre_impact - market_impact.applied_costs.reindex(
+        combined_pre_impact.index
+    ).fillna(0.0)
     combined.name = "combined_inverse_vol"
     train_returns = combined.reindex(train_dates).fillna(0.0)
     test_returns = combined.reindex(test_dates).fillna(0.0)
@@ -223,7 +264,36 @@ def evaluate_parameter_pair(
             hac_lags=capm_hac_lags,
         )
     )
-    return row, test_returns
+    test_market_analysis = market_impact.daily_analysis.reindex(test_dates)
+    test_trade_details = market_impact.trade_details[
+        market_impact.trade_details["date"].isin(test_dates)
+    ].copy()
+    test_capacity = summarize_capacity(
+        test_market_analysis,
+        test_trade_details,
+        portfolio_name="combined_inverse_vol",
+        target_dollars=market_impact_settings["target_dollars"],
+        max_adv_participation=market_impact_settings["max_adv_participation"],
+        impact_enabled=market_impact_settings["impact_enabled"],
+        model=market_impact_settings["model"],
+    ).iloc[0]
+    for key in (
+        "estimated_capacity_dollars",
+        "average_participation_rate",
+        "maximum_participation_rate",
+        "participation_breach_fraction",
+        "modeled_market_impact_cost",
+        "applied_market_impact_cost",
+    ):
+        row[f"test_{key}"] = test_capacity[key]
+    execution_costs = build_execution_cost_report(
+        combined_turnover,
+        combined_transaction_costs,
+        combined_slippage_costs,
+        market_impact,
+        portfolio_name="combined_inverse_vol",
+    ).reindex(test_dates)
+    return row, test_returns, execution_costs, test_market_analysis, test_trade_details
 
 
 def summarize_parameter_robustness(all_results: pd.DataFrame) -> pd.DataFrame:
@@ -290,6 +360,7 @@ def summarize_oos_path_comparison(
 
 def run_walk_forward_evaluation(
     prices: pd.DataFrame,
+    volumes: pd.DataFrame,
     returns: pd.DataFrame,
     benchmark_prices: pd.Series,
     benchmark_returns: pd.Series,
@@ -303,6 +374,7 @@ def run_walk_forward_evaluation(
     transaction_cost: float,
     max_position_weight: float | None,
     slippage_settings: dict,
+    market_impact_settings: dict,
     fixed_momentum_params: dict | None = None,
     fixed_meanrev_params: dict | None = None,
     capm_use_hac: bool = True,
@@ -322,13 +394,17 @@ def run_walk_forward_evaluation(
 
     rows = []
     test_return_map = {}
+    execution_cost_map = {}
+    market_analysis_map = {}
+    trade_detail_map = {}
     for window in windows:
         for momentum_number, meanrev_number in product(
             range(len(momentum_grid)), range(len(meanrev_grid))
         ):
             parameter_id = f"M{momentum_number + 1}_MR{meanrev_number + 1}"
-            row, test_returns = evaluate_parameter_pair(
+            row, test_returns, execution_costs, market_analysis, trade_details = evaluate_parameter_pair(
                 prices=prices,
+                volumes=volumes,
                 returns=returns,
                 benchmark_prices=benchmark_prices,
                 benchmark_returns=benchmark_returns,
@@ -340,11 +416,15 @@ def run_walk_forward_evaluation(
                 transaction_cost=transaction_cost,
                 max_position_weight=max_position_weight,
                 slippage_settings=slippage_settings,
+                market_impact_settings=market_impact_settings,
                 capm_use_hac=capm_use_hac,
                 capm_hac_lags=capm_hac_lags,
             )
             rows.append(row)
             test_return_map[(window.window_id, parameter_id)] = test_returns
+            execution_cost_map[(window.window_id, parameter_id)] = execution_costs
+            market_analysis_map[(window.window_id, parameter_id)] = market_analysis
+            trade_detail_map[(window.window_id, parameter_id)] = trade_details
 
     all_results = pd.DataFrame(rows)
     selected_rows = all_results.loc[
@@ -360,14 +440,28 @@ def run_walk_forward_evaluation(
         ~selected_oos_returns.index.duplicated(keep="first")
     ].sort_index()
     selected_oos_returns.name = "selected_out_of_sample_return"
+    selected_keys = [
+        (row.window_id, row.parameter_id) for row in selected_rows.itertuples()
+    ]
+    selected_execution_costs = pd.concat([execution_cost_map[key] for key in selected_keys])
+    selected_execution_costs = selected_execution_costs[
+        ~selected_execution_costs.index.duplicated(keep="first")
+    ].sort_index()
+    selected_market_analysis = pd.concat([market_analysis_map[key] for key in selected_keys])
+    selected_market_analysis = selected_market_analysis[
+        ~selected_market_analysis.index.duplicated(keep="first")
+    ].sort_index()
+    selected_trade_details = pd.concat([trade_detail_map[key] for key in selected_keys])
+    selected_trade_details = selected_trade_details.drop_duplicates(["date", "ticker"])
 
     fixed_momentum_params = fixed_momentum_params or momentum_grid[0]
     fixed_meanrev_params = fixed_meanrev_params or meanrev_grid[0]
     fixed_rows = []
     fixed_returns = []
     for window in windows:
-        row, test_returns = evaluate_parameter_pair(
+        row, test_returns, execution_costs, market_analysis, trade_details = evaluate_parameter_pair(
             prices=prices,
+            volumes=volumes,
             returns=returns,
             benchmark_prices=benchmark_prices,
             benchmark_returns=benchmark_returns,
@@ -379,11 +473,15 @@ def run_walk_forward_evaluation(
             transaction_cost=transaction_cost,
             max_position_weight=max_position_weight,
             slippage_settings=slippage_settings,
+            market_impact_settings=market_impact_settings,
             capm_use_hac=capm_use_hac,
             capm_hac_lags=capm_hac_lags,
         )
         fixed_rows.append(row)
         fixed_returns.append(test_returns)
+        execution_cost_map[(window.window_id, "fixed_production")] = execution_costs
+        market_analysis_map[(window.window_id, "fixed_production")] = market_analysis
+        trade_detail_map[(window.window_id, "fixed_production")] = trade_details
 
     fixed_results = pd.DataFrame(fixed_rows).sort_values("window_id").reset_index(drop=True)
     fixed_oos_returns = pd.concat(fixed_returns)
@@ -391,6 +489,54 @@ def run_walk_forward_evaluation(
         ~fixed_oos_returns.index.duplicated(keep="first")
     ].sort_index()
     fixed_oos_returns.name = "fixed_production_out_of_sample_return"
+    fixed_keys = [(window.window_id, "fixed_production") for window in windows]
+    fixed_execution_costs = pd.concat([execution_cost_map[key] for key in fixed_keys])
+    fixed_execution_costs = fixed_execution_costs[
+        ~fixed_execution_costs.index.duplicated(keep="first")
+    ].sort_index()
+    fixed_market_analysis = pd.concat([market_analysis_map[key] for key in fixed_keys])
+    fixed_market_analysis = fixed_market_analysis[
+        ~fixed_market_analysis.index.duplicated(keep="first")
+    ].sort_index()
+    fixed_trade_details = pd.concat([trade_detail_map[key] for key in fixed_keys])
+    fixed_trade_details = fixed_trade_details.drop_duplicates(["date", "ticker"])
+    capacity_summary = pd.concat(
+        [
+            summarize_capacity(
+                selected_market_analysis,
+                selected_trade_details,
+                portfolio_name="selected_parameters_oos",
+                target_dollars=market_impact_settings["target_dollars"],
+                max_adv_participation=market_impact_settings["max_adv_participation"],
+                impact_enabled=market_impact_settings["impact_enabled"],
+                model=market_impact_settings["model"],
+            ),
+            summarize_capacity(
+                fixed_market_analysis,
+                fixed_trade_details,
+                portfolio_name="fixed_production_oos",
+                target_dollars=market_impact_settings["target_dollars"],
+                max_adv_participation=market_impact_settings["max_adv_participation"],
+                impact_enabled=market_impact_settings["impact_enabled"],
+                model=market_impact_settings["model"],
+            ),
+        ],
+        ignore_index=True,
+    )
+    execution_costs = pd.concat(
+        {
+            "selected_parameters_oos": selected_execution_costs,
+            "fixed_production_oos": fixed_execution_costs,
+        },
+        names=["path", "date"],
+    ).reset_index()
+    market_impact_analysis = pd.concat(
+        {
+            "selected_parameters_oos": selected_market_analysis,
+            "fixed_production_oos": fixed_market_analysis,
+        },
+        names=["path", "date"],
+    ).reset_index()
 
     return {
         "windows": pd.DataFrame([window.as_record() for window in windows]),
@@ -402,6 +548,9 @@ def run_walk_forward_evaluation(
         "path_comparison": summarize_oos_path_comparison(selected_rows, fixed_results),
         "oos_returns": selected_oos_returns,
         "fixed_oos_returns": fixed_oos_returns,
+        "execution_costs": execution_costs,
+        "capacity_summary": capacity_summary,
+        "market_impact_analysis": market_impact_analysis,
     }
 
 

@@ -43,6 +43,15 @@ SLIPPAGE_VOLATILITY_WINDOW = 20
 SLIPPAGE_VOLATILITY_REFERENCE = 0.02
 SLIPPAGE_TURNOVER_MULTIPLIER = 1.0
 
+# Optional market-impact and capacity model. Disabled by default to preserve
+# the existing production return path while still allowing research runs to
+# estimate deployable capital against observable liquidity.
+ENABLE_MARKET_IMPACT = False
+MARKET_IMPACT_MODEL = "square_root"
+MAX_ADV_PARTICIPATION = 0.10
+IMPACT_COEFFICIENT = 0.10
+CAPACITY_TARGET_DOLLARS = 100_000_000
+
 # Optional research-only SciPy optimizer; inverse-vol remains production default.
 ENABLE_CONSTRAINED_OPTIMIZER = False
 OPTIMIZER_MAX_WEIGHT = 0.75
