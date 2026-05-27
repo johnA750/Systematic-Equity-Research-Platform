@@ -103,9 +103,11 @@ Key exports include:
 ```text
 selected_results.csv
 fixed_parameter_results.csv
-comparison_summary.csv
-parameter_stability.csv
-rolling_performance.csv
+path_comparison.csv
+parameter_summary.csv
+stability_summary.csv
+rolling_metrics.csv
+fixed_rolling_metrics.csv
 ```
 
 ## Factor Attribution
