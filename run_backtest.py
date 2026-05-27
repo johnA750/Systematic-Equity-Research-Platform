@@ -4,40 +4,62 @@ import matplotlib.pyplot as plt
 from config.config import (
     TICKERS,
     BENCHMARK_TICKER,
+    USE_SP500_UNIVERSE,
     START_DATE,
     END_DATE,
     MOMENTUM_LOOKBACK,
     TOP_N,
     REBALANCE_FREQ,
     TRANSACTION_COST,
+    MAX_MISSING_DATA_FRACTION,
+    MIN_STOCK_PRICE,
+    DATA_DOWNLOAD_BATCH_SIZE,
+    ENABLE_LIQUIDITY_FILTER,
+    MIN_AVERAGE_DOLLAR_VOLUME,
+    ADV_LOOKBACK_WINDOW,
+    MAX_POSITION_WEIGHT,
+    SLIPPAGE_MODEL,
+    SLIPPAGE_BPS,
+    SLIPPAGE_VOLATILITY_WINDOW,
+    SLIPPAGE_VOLATILITY_REFERENCE,
+    SLIPPAGE_TURNOVER_MULTIPLIER,
+    ENABLE_CONSTRAINED_OPTIMIZER,
+    OPTIMIZER_MAX_WEIGHT,
 )
 
-from data.loader import load_price_data, clean_price_data
+from data.loader import load_market_data, load_price_data, clean_price_data
+from data.liquidity import build_liquidity_eligibility_mask
+from data.sp500 import get_sp500_constituents
 from analytics.returns import compute_daily_returns
 from analytics.performance import compute_cumulative_returns
 from analytics.metrics import compute_performance_metrics
 from analytics.turnover import compute_turnover_metrics
 from analytics.drawdown import compute_drawdown_series
 from analytics.factor_regression import run_capm_regression, summarize_capm_results
+from analytics.exposure import (
+    compute_gross_exposure,
+    summarize_gross_exposure,
+    summarize_sector_exposures,
+)
 from analytics.regime_analysis import (
     classify_ma_regime,
     classify_vol_regime,
     compute_regime_metrics,
     print_regime_metrics,
 )
-from analytics.slippage import apply_slippage_to_returns
+from execution.slippage import apply_execution_slippage
 from strategies.momentum import generate_momentum_weights
 from strategies.mean_reversion import generate_mean_reversion_weights
 from engine.backtest import run_backtest
 from portfolio.regime import compute_regime_multiplier
 from portfolio.vol_targeting import apply_vol_targeting
-from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown
+from portfolio.optimization import optimize_long_only_weights
+from reporting.plots import plot_strategy_vs_benchmark, plot_drawdown, plot_gross_exposure
 
 
 # =========================
 # User-set research assumptions
 # =========================
-SLIPPAGE_BPS = 5.0
 CAPM_USE_HAC = True
 CAPM_HAC_LAGS = 5
 
@@ -51,8 +73,65 @@ VERBOSE = False
 # =========================
 # Load and clean price data
 # =========================
-prices = load_price_data(TICKERS, START_DATE, END_DATE)
-prices = clean_price_data(prices)
+if USE_SP500_UNIVERSE:
+    constituents = get_sp500_constituents()
+    universe_tickers = [record["ticker"] for record in constituents]
+    sector_map = {
+        record["ticker"]: record["sector"]
+        for record in constituents
+        if record["sector"]
+    }
+else:
+    universe_tickers = TICKERS
+    sector_map = {}
+
+if ENABLE_LIQUIDITY_FILTER:
+    prices, volumes = load_market_data(
+        universe_tickers,
+        START_DATE,
+        END_DATE,
+        batch_size=DATA_DOWNLOAD_BATCH_SIZE,
+    )
+else:
+    prices = load_price_data(
+        universe_tickers,
+        START_DATE,
+        END_DATE,
+        batch_size=DATA_DOWNLOAD_BATCH_SIZE,
+    )
+    volumes = pd.DataFrame()
+
+prices = clean_price_data(
+    prices,
+    max_missing_fraction=MAX_MISSING_DATA_FRACTION,
+    min_price=MIN_STOCK_PRICE,
+)
+
+if prices.empty:
+    raise ValueError("No tradable equities remained after universe data filtering.")
+
+liquidity_eligibility = None
+if ENABLE_LIQUIDITY_FILTER:
+    liquidity_eligibility = build_liquidity_eligibility_mask(
+        prices,
+        volumes.reindex(index=prices.index, columns=prices.columns),
+        min_average_dollar_volume=MIN_AVERAGE_DOLLAR_VOLUME,
+        lookback_window=ADV_LOOKBACK_WINDOW,
+    )
+
+print(
+    f"Universe: {'Current S&P 500' if USE_SP500_UNIVERSE else 'Configured ticker list'} "
+    f"({len(prices.columns)} retained of {len(universe_tickers)} requested)"
+)
+if ENABLE_LIQUIDITY_FILTER and liquidity_eligibility is not None:
+    latest_eligible = int(liquidity_eligibility.iloc[-1].sum())
+    print(
+        f"Liquidity Filter: enabled (ADV >= ${MIN_AVERAGE_DOLLAR_VOLUME:,.0f}, "
+        f"{ADV_LOOKBACK_WINDOW}-day lagged window; "
+        f"{latest_eligible} eligible on final date)"
+    )
+elif ENABLE_LIQUIDITY_FILTER:
+    print("Liquidity Filter: volume unavailable; continuing with price-only behavior")
 
 returns = compute_daily_returns(prices)
 
@@ -94,7 +173,9 @@ momentum_weights = generate_momentum_weights(
     lookback=MOMENTUM_LOOKBACK,
     top_n=TOP_N,
     rebalance_freq=REBALANCE_FREQ,
-    vol_lookback=20
+    vol_lookback=20,
+    max_position_weight=MAX_POSITION_WEIGHT,
+    eligibility_mask=liquidity_eligibility,
 )
 
 regime_multiplier_aligned = regime_multiplier.reindex(momentum_weights.index).fillna(0.0)
@@ -107,10 +188,14 @@ momentum_returns_gross, momentum_turnover = run_backtest(
     return_turnover=True
 )
 
-momentum_returns = apply_slippage_to_returns(
+momentum_returns = apply_execution_slippage(
     momentum_returns_gross,
     momentum_turnover,
     slippage_bps=SLIPPAGE_BPS,
+    model=SLIPPAGE_MODEL,
+    volatility_window=SLIPPAGE_VOLATILITY_WINDOW,
+    volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
+    turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
 )
 
 momentum_cumulative = compute_cumulative_returns(momentum_returns)
@@ -130,6 +215,8 @@ meanrev_weights = generate_mean_reversion_weights(
     min_pullback=-0.10,
     max_pullback=-0.03,
     weighting_scheme="equal",
+    max_position_weight=MAX_POSITION_WEIGHT,
+    eligibility_mask=liquidity_eligibility,
 )
 
 meanrev_returns_gross, meanrev_turnover = run_backtest(
@@ -139,10 +226,14 @@ meanrev_returns_gross, meanrev_turnover = run_backtest(
     return_turnover=True
 )
 
-meanrev_returns = apply_slippage_to_returns(
+meanrev_returns = apply_execution_slippage(
     meanrev_returns_gross,
     meanrev_turnover,
     slippage_bps=SLIPPAGE_BPS,
+    model=SLIPPAGE_MODEL,
+    volatility_window=SLIPPAGE_VOLATILITY_WINDOW,
+    volatility_reference=SLIPPAGE_VOLATILITY_REFERENCE,
+    turnover_multiplier=SLIPPAGE_TURNOVER_MULTIPLIER,
 )
 
 meanrev_cumulative = compute_cumulative_returns(meanrev_returns)
@@ -175,6 +266,13 @@ combined_turnover = (
     + base_mr_weight * meanrev_turnover.reindex(combined_returns.index).fillna(0.0)
 )
 combined_turnover_metrics = compute_turnover_metrics(combined_turnover)
+combined_weights = (
+    base_mom_weight * momentum_weights
+    + base_mr_weight * meanrev_weights
+)
+combined_exposure_metrics = summarize_gross_exposure(combined_weights)
+combined_gross_exposure = compute_gross_exposure(combined_weights)
+combined_sector_exposure = summarize_sector_exposures(combined_weights, sector_map)
 
 # =========================
 # Combined Portfolio - Vol Targeted
@@ -194,6 +292,30 @@ vol_targeted_returns.name = "combined_vol_targeted"
 vol_targeted_cumulative = compute_cumulative_returns(vol_targeted_returns)
 vol_targeted_metrics = compute_performance_metrics(vol_targeted_returns)
 vol_targeted_drawdown = compute_drawdown_series(vol_targeted_cumulative)
+vol_targeted_weights = combined_weights.mul(
+    leverage_series.reindex(combined_weights.index).fillna(1.0),
+    axis=0,
+)
+vol_targeted_exposure_metrics = summarize_gross_exposure(vol_targeted_weights)
+vol_targeted_gross_exposure = compute_gross_exposure(vol_targeted_weights)
+vol_targeted_sector_exposure = summarize_sector_exposures(vol_targeted_weights, sector_map)
+
+# =========================
+# Optional research-only constrained optimization
+# =========================
+optimized_sleeve_weights = None
+if ENABLE_CONSTRAINED_OPTIMIZER:
+    sleeve_returns = pd.concat(
+        [
+            momentum_returns.rename("momentum"),
+            meanrev_returns.rename("mean_reversion"),
+        ],
+        axis=1,
+    )
+    optimized_sleeve_weights = optimize_long_only_weights(
+        sleeve_returns,
+        max_weight=OPTIMIZER_MAX_WEIGHT,
+    )
 
 # =========================
 # CAPM regression
@@ -233,7 +355,7 @@ combined_vol_regime = compute_regime_metrics(
 # =========================
 # Print metrics
 # =========================
-print(f"Assumed Slippage (bps): {SLIPPAGE_BPS:.2f}")
+print(f"Slippage Model: {SLIPPAGE_MODEL} ({SLIPPAGE_BPS:.2f} base bps)")
 
 print("\nMomentum Strategy Metrics:")
 for key, value in momentum_metrics.items():
@@ -254,6 +376,23 @@ for key, value in combined_metrics.items():
 print("\nVol-Targeted Combined Strategy Metrics:")
 for key, value in vol_targeted_metrics.items():
     print(f"{key}: {value:.4f}")
+
+print("\nGross Exposure Summary:")
+for key, value in combined_exposure_metrics.items():
+    print(f"Inverse-Vol Combined {key}: {value:.4f}")
+for key, value in vol_targeted_exposure_metrics.items():
+    print(f"Vol-Targeted Combined {key}: {value:.4f}")
+
+if not combined_sector_exposure.empty:
+    print("\nInverse-Vol Combined Sector Exposure:")
+    print(combined_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
+    print("\nVol-Targeted Combined Sector Exposure:")
+    print(vol_targeted_sector_exposure.to_string(float_format=lambda value: f"{value:.4f}"))
+
+if optimized_sleeve_weights is not None:
+    print("\nResearch-Only Constrained Minimum-Variance Sleeve Weights:")
+    for key, value in optimized_sleeve_weights.items():
+        print(f"{key}: {value:.4f}")
 
 print("\nFinal Cumulative Values:")
 print(f"Momentum: {momentum_cumulative.iloc[-1]:.4f}")
@@ -333,6 +472,18 @@ plot_strategy_vs_benchmark(
 )
 
 plot_drawdown(vol_targeted_drawdown, title="Vol-Targeted Combined Drawdown")
+
+plot_gross_exposure(
+    combined_gross_exposure,
+    title="Combined Inverse-Vol Gross Exposure",
+    label="Combined Inverse-Vol",
+)
+
+plot_gross_exposure(
+    vol_targeted_gross_exposure,
+    title="Vol-Targeted Combined Gross Exposure",
+    label="Vol-Targeted Combined",
+)
 
 # Show all plots at once
 plt.show()

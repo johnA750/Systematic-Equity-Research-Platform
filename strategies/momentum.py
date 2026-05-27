@@ -1,7 +1,17 @@
 import pandas as pd
 
+from strategies.position_sizing import normalize_with_position_cap
 
-def generate_momentum_weights(prices, lookback=20, top_n=10, rebalance_freq=20, vol_lookback=20):
+
+def generate_momentum_weights(
+    prices,
+    lookback=20,
+    top_n=10,
+    rebalance_freq=20,
+    vol_lookback=20,
+    max_position_weight=None,
+    eligibility_mask=None,
+):
     """
     Generate long-only volatility-adjusted momentum portfolio weights.
 
@@ -12,6 +22,8 @@ def generate_momentum_weights(prices, lookback=20, top_n=10, rebalance_freq=20, 
     - only consider stocks with positive momentum
     - select up to top_n stocks by score
     - weight proportional to score
+    - optionally cap final selected-name weights
+    - optionally exclude names failing an external tradability screen
     - rebalance every rebalance_freq days
     """
 
@@ -26,6 +38,20 @@ def generate_momentum_weights(prices, lookback=20, top_n=10, rebalance_freq=20, 
         if i % rebalance_freq == 0:
             daily_momentum = momentum.loc[date].dropna()
             daily_vol = volatility.loc[date].dropna()
+
+            if eligibility_mask is not None:
+                eligible_names = eligibility_mask.reindex(
+                    index=[date],
+                    columns=prices.columns,
+                    fill_value=False,
+                ).iloc[0]
+                liquid_names = eligible_names[eligible_names].index
+                daily_momentum = daily_momentum.loc[
+                    daily_momentum.index.intersection(liquid_names)
+                ]
+                daily_vol = daily_vol.loc[
+                    daily_vol.index.intersection(liquid_names)
+                ]
 
             common = daily_momentum.index.intersection(daily_vol.index)
             daily_momentum = daily_momentum.loc[common]
@@ -50,8 +76,10 @@ def generate_momentum_weights(prices, lookback=20, top_n=10, rebalance_freq=20, 
                 new_weights = pd.Series(0.0, index=prices.columns)
                 new_weights.loc[top.index] = top.values
 
-                if new_weights.sum() > 0:
-                    new_weights = new_weights / new_weights.sum()
+                new_weights = normalize_with_position_cap(
+                    new_weights,
+                    max_position_weight=max_position_weight,
+                )
 
                 last_weights = new_weights
 

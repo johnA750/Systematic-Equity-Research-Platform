@@ -19,3 +19,17 @@ def plot_drawdown(drawdown_series, title="Drawdown"):
     plt.xlabel("Date")
     plt.ylabel("Drawdown")
     plt.grid(True)
+
+
+def plot_gross_exposure(
+    exposure_series,
+    title="Gross Exposure",
+    label="Gross Exposure",
+):
+    plt.figure(figsize=(10, 6))
+    plt.plot(exposure_series.index, exposure_series.values, label=label)
+    plt.title(title)
+    plt.xlabel("Date")
+    plt.ylabel("Gross Exposure")
+    plt.legend()
+    plt.grid(True)

@@ -1,5 +1,7 @@
 import pandas as pd
 
+from execution.slippage import apply_execution_slippage, compute_slippage_costs
+
 
 def apply_slippage_to_returns(
     gross_returns: pd.Series,
@@ -29,16 +31,12 @@ def apply_slippage_to_returns(
     pd.Series
         Net returns after slippage adjustment.
     """
-    gross_returns = gross_returns.copy()
-    turnover = turnover.reindex(gross_returns.index).fillna(0.0)
-
-    slippage_rate = slippage_bps / 10000.0
-    slippage_cost = turnover * slippage_rate
-
-    net_returns = gross_returns - slippage_cost
-    net_returns.name = getattr(gross_returns, "name", "returns")
-
-    return net_returns
+    return apply_execution_slippage(
+        gross_returns,
+        turnover,
+        slippage_bps=slippage_bps,
+        model="fixed",
+    )
 
 
 def compute_slippage_cost_series(
@@ -48,8 +46,10 @@ def compute_slippage_cost_series(
     """
     Return a slippage cost series for reporting/inspection.
     """
-    turnover = turnover.copy().fillna(0.0)
-    slippage_rate = slippage_bps / 10000.0
-    slippage_cost = turnover * slippage_rate
-    slippage_cost.name = "slippage_cost"
-    return slippage_cost
+    zero_returns = pd.Series(0.0, index=turnover.index)
+    return compute_slippage_costs(
+        zero_returns,
+        turnover,
+        slippage_bps=slippage_bps,
+        model="fixed",
+    )
