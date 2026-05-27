@@ -46,3 +46,50 @@ SLIPPAGE_TURNOVER_MULTIPLIER = 1.0
 # Optional research-only SciPy optimizer; inverse-vol remains production default.
 ENABLE_CONSTRAINED_OPTIMIZER = False
 OPTIMIZER_MAX_WEIGHT = 0.75
+
+# Walk-forward research settings. These are used only by
+# research/run_walk_forward.py; the production full-sample runner is unchanged.
+WALK_FORWARD_MODE = "rolling"
+WALK_FORWARD_TRAIN_LENGTH = 252
+WALK_FORWARD_TEST_LENGTH = 126
+WALK_FORWARD_STEP_LENGTH = 126
+WALK_FORWARD_ROLLING_METRICS_WINDOW = 63
+WALK_FORWARD_EXPORT_RESULTS = True
+WALK_FORWARD_REPORT_DIR = "reports/walk_forward"
+WALK_FORWARD_SAVE_PLOTS = True
+
+WALK_FORWARD_MOMENTUM_GRID = [
+    {"lookback": 90, "top_n": TOP_N, "rebalance_freq": REBALANCE_FREQ, "vol_lookback": 20},
+    {"lookback": MOMENTUM_LOOKBACK, "top_n": TOP_N, "rebalance_freq": REBALANCE_FREQ, "vol_lookback": 20},
+    {"lookback": 180, "top_n": TOP_N, "rebalance_freq": REBALANCE_FREQ, "vol_lookback": 20},
+]
+
+WALK_FORWARD_MEAN_REVERSION_GRID = [
+    {
+        "lookback": 3,
+        "top_n": 15,
+        "rebalance_freq": 10,
+        "trend_window": 40,
+        "min_pullback": -0.10,
+        "max_pullback": -0.03,
+        "weighting_scheme": "equal",
+    },
+    {
+        "lookback": 5,
+        "top_n": 15,
+        "rebalance_freq": 10,
+        "trend_window": 40,
+        "min_pullback": -0.10,
+        "max_pullback": -0.03,
+        "weighting_scheme": "equal",
+    },
+    {
+        "lookback": 7,
+        "top_n": 15,
+        "rebalance_freq": 10,
+        "trend_window": 40,
+        "min_pullback": -0.10,
+        "max_pullback": -0.03,
+        "weighting_scheme": "equal",
+    },
+]

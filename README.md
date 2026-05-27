@@ -35,6 +35,23 @@ survivorship-bias-free.
 - Set `ENABLE_CONSTRAINED_OPTIMIZER = True` to print optional research-only
   minimum-variance sleeve weights; inverse-vol remains the main construction.
 
+## Walk-Forward Research
+
+The production runner remains `run_backtest.py`. Institutional-style
+out-of-sample evaluation is available separately:
+
+```powershell
+.\.venv\Scripts\python.exe research\run_walk_forward.py
+```
+
+Configure rolling or expanding evaluation through the `WALK_FORWARD_*`
+settings in `config/config.py`. The runner selects parameter combinations
+using training-period Sharpe only, applies train-estimated inverse-vol sleeve
+weights to the following test period, reports train/test metrics and CAPM
+results, calculates parameter stability, plots rolling OOS Sharpe,
+volatility, beta, and alpha, and optionally exports CSV research tables under
+`reports/walk_forward/`.
+
 ## Project Structure
 
 ```text

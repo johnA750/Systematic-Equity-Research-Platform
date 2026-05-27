@@ -33,3 +33,22 @@ def plot_gross_exposure(
     plt.ylabel("Gross Exposure")
     plt.legend()
     plt.grid(True)
+
+
+def plot_rolling_performance(rolling_metrics, title_prefix="Out-of-Sample"):
+    """Plot rolling return and factor diagnostics in a single figure."""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9), sharex=True)
+    series_to_plot = [
+        ("Rolling Sharpe", axes[0, 0]),
+        ("Rolling Volatility", axes[0, 1]),
+        ("Rolling Beta", axes[1, 0]),
+        ("Rolling Alpha Annualized", axes[1, 1]),
+    ]
+
+    for column, axis in series_to_plot:
+        axis.plot(rolling_metrics.index, rolling_metrics[column])
+        axis.set_title(f"{title_prefix} {column}")
+        axis.grid(True)
+
+    fig.tight_layout()
+    return fig
