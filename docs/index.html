@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Institutional-style systematic equity research platform with execution realism, factor attribution, walk-forward validation, and scalable universe testing.">
+  <title>Systematic Equity Research Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="#top">Trading Backtester</a>
+      <div class="nav-links" aria-label="Primary navigation">
+        <a href="#architecture">Architecture</a>
+        <a href="#results">Results</a>
+        <a href="#dashboards">Dashboards</a>
+        <a href="#limitations">Limitations</a>
+        <a href="https://github.com/johnA750/Trading-Backtester">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero section">
+      <div class="hero-copy">
+        <p class="eyebrow">Institutional-style quantitative research platform</p>
+        <h1>Systematic equity backtesting with execution realism, factor attribution, and out-of-sample validation.</h1>
+        <p class="lead">
+          A Python research stack for testing momentum and pullback strategy sleeves across a production 50-stock baseline and scalable S&P 500 research universe.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/johnA750/Trading-Backtester">View Repository</a>
+          <a class="button secondary" href="#dashboards">View Dashboards</a>
+        </div>
+      </div>
+      <aside class="hero-card" aria-label="Validated headline metrics">
+        <div class="metric-row">
+          <span>Production Sharpe</span>
+          <strong>1.58</strong>
+        </div>
+        <div class="metric-row">
+          <span>Production Return</span>
+          <strong>22.9%</strong>
+        </div>
+        <div class="metric-row">
+          <span>S&P 500 Names Retained</span>
+          <strong>487</strong>
+        </div>
+        <div class="metric-row">
+          <span>Scalable Capacity Est.</span>
+          <strong>$248M</strong>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section compact">
+      <div class="section-heading">
+        <p class="eyebrow">Project Story</p>
+        <h2>Research engine to realistic validation stack</h2>
+      </div>
+      <div class="story-grid">
+        <article>
+          <span class="step">01</span>
+          <h3>Signal Research</h3>
+          <p>Momentum and pullback sleeves are intentionally simple, auditable, and parameterized without changing production logic.</p>
+        </article>
+        <article>
+          <span class="step">02</span>
+          <h3>Execution Realism</h3>
+          <p>Transaction costs, adaptive slippage, market impact, turnover, liquidity filters, and capacity estimates make the backtest harder to fool.</p>
+        </article>
+        <article>
+          <span class="step">03</span>
+          <h3>Validation</h3>
+          <p>Walk-forward tests compare selected parameters against fixed production defaults to measure stability and out-of-sample decay.</p>
+        </article>
+        <article>
+          <span class="step">04</span>
+          <h3>Scalability</h3>
+          <p>Current S&P 500 and point-in-time membership frameworks support larger-universe research and survivorship-bias diagnostics.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="architecture" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Architecture</p>
+        <h2>Modular research and production paths</h2>
+      </div>
+      <div class="diagram architecture-diagram" role="img" aria-label="Architecture diagram">
+        <div>Data<br><span>prices, volumes, constituents, factors</span></div>
+        <div>Strategies<br><span>momentum, pullback</span></div>
+        <div>Portfolio<br><span>inverse-vol, vol target</span></div>
+        <div>Execution<br><span>slippage, impact, capacity</span></div>
+        <div>Analytics<br><span>CAPM, FF3, regimes</span></div>
+        <div>Reporting<br><span>CSV, metadata, dashboards</span></div>
+      </div>
+      <div class="diagram workflow-diagram" role="img" aria-label="Workflow diagram">
+        <div>Choose Mode</div>
+        <div>Build Universe</div>
+        <div>Run Signals</div>
+        <div>Apply Costs</div>
+        <div>Export Reports</div>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div>
+        <p class="eyebrow">Strategies</p>
+        <h2>Simple signals, realistic portfolio construction</h2>
+        <p>
+          The system combines a trailing momentum sleeve with a pullback-based mean-reversion sleeve. The production path keeps fixed parameters and blends sleeve returns with inverse-volatility weights.
+        </p>
+      </div>
+      <div class="detail-list">
+        <div><strong>Momentum:</strong> ranks stocks by trailing risk-adjusted strength.</div>
+        <div><strong>Pullback:</strong> buys short-term weakness within longer-term uptrends.</div>
+        <div><strong>Risk controls:</strong> max position weights, turnover tracking, gross exposure reporting.</div>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div>
+        <p class="eyebrow">Execution And Capacity</p>
+        <h2>Market impact is treated as a first-class research question</h2>
+        <p>
+          The execution layer preserves fixed slippage while optionally adding turnover-adjusted and market-impact-aware cost models. Capacity estimates use ADV participation, realized volatility, trade size, and liquidity utilization.
+        </p>
+      </div>
+      <div class="detail-list">
+        <div><strong>Average ADV participation:</strong> roughly 0.49% in S&P 500 research.</div>
+        <div><strong>Impact ON degradation:</strong> S&P research Sharpe declined by about 0.046.</div>
+        <div><strong>Capacity estimate:</strong> roughly $248M for the scalable research configuration.</div>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div>
+        <p class="eyebrow">Factor Analysis</p>
+        <h2>Fama-French attribution beyond simple CAPM</h2>
+        <p>
+          The analytics layer supports CAPM, Fama-French 3-factor, optional 5-factor frameworks, factor t-stats and p-values, and rolling exposure plots using statsmodels OLS.
+        </p>
+      </div>
+      <div class="detail-list">
+        <div><strong>Production FF3 alpha:</strong> about 19.4% annualized.</div>
+        <div><strong>S&P impact ON FF3 alpha:</strong> about 5.6% annualized.</div>
+        <div><strong>Exports:</strong> factor summaries and rolling factor exposure CSVs.</div>
+      </div>
+    </section>
+
+    <section id="results" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Key Findings</p>
+        <h2>Validated results from the final sweep</h2>
+      </div>
+      <div class="results-grid">
+        <article class="result-card">
+          <h3>Strongest Research Result</h3>
+          <p>Production 50-stock baseline: 22.9% annualized return, 13.6% volatility, 1.58 Sharpe, and low beta.</p>
+        </article>
+        <article class="result-card">
+          <h3>Most Realistic Scalable Result</h3>
+          <p>S&P 500 research with market impact enabled: 9.08% annualized return, 0.645 Sharpe, and about $248M estimated capacity.</p>
+        </article>
+        <article class="result-card">
+          <h3>Walk-Forward Insight</h3>
+          <p>Fixed production parameters outperformed noisy rolling selection on average OOS Sharpe: 1.04 versus 0.85.</p>
+        </article>
+        <article class="result-card">
+          <h3>Execution Insight</h3>
+          <p>Market impact compressed S&P 500 research performance, reducing annualized return by roughly 0.77 percentage points.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Impact</th>
+              <th>Return</th>
+              <th>Sharpe</th>
+              <th>Max DD</th>
+              <th>FF3 Alpha</th>
+              <th>Capacity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Production Baseline</td>
+              <td>OFF</td>
+              <td>22.89%</td>
+              <td>1.5806</td>
+              <td>-8.65%</td>
+              <td>19.37%</td>
+              <td>$1.83B</td>
+            </tr>
+            <tr>
+              <td>S&P 500 Research</td>
+              <td>ON</td>
+              <td>9.08%</td>
+              <td>0.6450</td>
+              <td>-12.46%</td>
+              <td>5.60%</td>
+              <td>$247.6M</td>
+            </tr>
+            <tr>
+              <td>Walk-Forward Fixed</td>
+              <td>OFF</td>
+              <td>18.98%</td>
+              <td>1.0426</td>
+              <td>-6.19%</td>
+              <td>13.61%</td>
+              <td>$2.58B</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="dashboards" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Dashboards</p>
+        <h2>Representative report outputs</h2>
+      </div>
+      <div class="gallery">
+        <figure>
+          <img src="assets/production_dashboard.png" alt="Production dashboard with equity curves and rolling metrics">
+          <figcaption>Production baseline dashboard</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/execution_dashboard.png" alt="Execution dashboard showing costs, turnover, participation, and bottlenecks">
+          <figcaption>Execution and market impact dashboard</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/capacity_curves.png" alt="Capacity curves for capital scaling and performance degradation">
+          <figcaption>Capacity sensitivity curves</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/impact_comparison.png" alt="Comparison of slippage-only and market-impact-enabled performance">
+          <figcaption>Impact OFF versus ON comparison</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/factor_exposures.png" alt="Rolling factor exposure charts">
+          <figcaption>Rolling factor exposure examples</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/survivorship_bias_analysis.png" alt="Survivorship bias diagnostic visualization">
+          <figcaption>Survivorship framework diagnostic</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div>
+        <p class="eyebrow">Survivorship Framework</p>
+        <h2>Point-in-time membership support</h2>
+        <p>
+          The historical-universe framework supports dated constituent membership, entry and exit dates, member turnover diagnostics, and survivor-only versus point-in-time comparisons.
+        </p>
+      </div>
+      <div class="detail-list">
+        <div><strong>Current mode:</strong> current S&P 500 constituents for scalability research.</div>
+        <div><strong>Historical mode:</strong> requires external point-in-time membership data.</div>
+        <div><strong>Delisted names:</strong> supported when vendor price history is supplied.</div>
+      </div>
+    </section>
+
+    <section id="limitations" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Research Limitations</p>
+        <h2>Explicit assumptions, not hidden caveats</h2>
+      </div>
+      <div class="limitations-grid">
+        <article>
+          <h3>Yahoo Data</h3>
+          <p>Public data is suitable for portfolio demonstration and research prototyping, not production trading.</p>
+        </article>
+        <article>
+          <h3>Survivorship-Free Data</h3>
+          <p>True point-in-time benchmarking requires licensed historical membership and delisted-security data.</p>
+        </article>
+        <article>
+          <h3>Impact Model</h3>
+          <p>Market impact is stylized and transparent, but not broker-calibrated.</p>
+        </article>
+        <article>
+          <h3>Walk-Forward Windows</h3>
+          <p>The current validation windows are intentionally lightweight for local reproducibility.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section stack">
+      <div>
+        <p class="eyebrow">Technical Stack</p>
+        <h2>Python-first, reproducible, and inspectable</h2>
+      </div>
+      <div class="pill-row">
+        <span>Python</span>
+        <span>pandas</span>
+        <span>NumPy</span>
+        <span>matplotlib</span>
+        <span>statsmodels</span>
+        <span>yfinance</span>
+        <span>SciPy</span>
+        <span>GitHub Pages</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Systematic Equity Backtesting and Research Platform</p>
+    <a href="https://github.com/johnA750/Trading-Backtester">Repository</a>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>

@@ -68,6 +68,24 @@ Common outputs include:
 
 Curated example visuals for GitHub live in `docs/assets/`.
 
+## GitHub Pages Showcase
+
+The public showcase site lives in `docs/` and requires no build step.
+
+Recommended GitHub Pages settings:
+
+- Source: `Deploy from a branch`
+- Branch: `main`
+- Folder: `/docs`
+
+Expected project URL:
+
+```text
+https://johnA750.github.io/Trading-Backtester/
+```
+
+Detailed deployment instructions are in `docs/GITHUB_PAGES.md`.
+
 ## Current Limitations
 
 - Yahoo Finance data is suitable for demonstration and research prototyping, not production trading.
