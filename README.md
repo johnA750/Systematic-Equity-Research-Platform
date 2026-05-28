@@ -1,106 +1,210 @@
-# Systematic Equity Backtesting and Research Platform
+# Systematic Equity Backtesting And Research Platform
 
-A modular Python platform for testing long-only U.S. equity strategies across a fixed production baseline, current or point-in-time S&P 500 research universes, and walk-forward out-of-sample validation.
+Institutional-style Python research platform for systematic U.S. equity strategy testing, portfolio construction, execution realism, factor attribution, walk-forward validation, and point-in-time universe research.
 
-The platform keeps signal logic simple and auditable while adding portfolio construction, execution modeling, exposure analysis, factor decomposition, and reproducible experiment reporting.
+This project is designed as a transparent quantitative research stack: simple auditable signals, realistic portfolio and execution assumptions, reproducible reports, and explicit separation between production-style defaults and research diagnostics.
 
-## Highlights
+## Project Overview
 
-- Momentum and pullback-based mean reversion strategy sleeves
-- Inverse-volatility production portfolio construction with volatility targeting
-- Production 50-stock baseline, current S&P 500 research, and dated point-in-time membership support
-- Missing-data, price, and optional lagged average-dollar-volume eligibility filters
-- Transaction costs plus fixed, volatility-adjusted, or turnover-adjusted slippage
-- Optional ADV- and volatility-based market impact with deployable-capacity estimates
-- Position caps, turnover tracking, gross exposure, drawdown, and sector exposure reporting
-- CAPM and Fama-French 3-factor / optional 5-factor attribution with rolling exposures
-- Rolling or expanding walk-forward validation comparing selected parameters with fixed production parameters
-- Timestamped report folders containing CSV outputs, plots, and configuration metadata
+The platform evaluates two long-only equity sleeves:
 
-## Research Caveat
+- Momentum: ranks equities by trailing risk-adjusted strength and holds top names.
+- Pullback mean reversion: buys controlled short-term pullbacks within longer-term uptrends.
 
-The current S&P 500 mode retrieves today's constituent list and applies it across historical returns. It is useful for testing scalability and execution realism, but it is not a survivorship-bias-free historical index-membership study.
+The production portfolio combines sleeves with inverse-volatility weights, applies optional volatility targeting, models transaction costs and slippage, and exports performance, exposure, factor, execution, and robustness reports.
 
-The `HISTORICAL_SP500` framework accepts dated membership intervals and applies eligibility only on dates when each security was a supplied index member. It removes current-constituent lookahead only when populated with authoritative point-in-time membership data. Complete delisted-security return handling additionally depends on the market-data vendor returning historical and terminal event-adjusted prices; unavailable histories are reported, not silently invented.
+The research layer adds current S&P 500 scaling, optional point-in-time historical membership, market impact and capacity analysis, Fama-French attribution, and selected-versus-fixed walk-forward validation.
 
-## Strategy And Portfolio Design
+## Architecture
 
-The production strategy behavior remains intentionally stable:
-
-| Component | Implementation |
-| --- | --- |
-| Momentum sleeve | Ranks equities by trailing returns and holds the strongest names on rebalance dates. |
-| Mean reversion sleeve | Selects qualifying pullbacks within the existing trend and pullback rules. |
-| Portfolio construction | Combines sleeves using inverse-volatility weights by default. |
-| Volatility control | Applies portfolio-level volatility targeting. |
-| Risk controls | Optional maximum position weight and gross exposure reporting. |
-| Execution | Transaction costs, configurable slippage, and optional market impact applied to observed trades. |
-
-Research features evaluate these decisions; they do not replace the production signal logic or production parameter defaults.
-
-## Experiment Modes
-
-| Mode | Entry Point | Universe | Purpose |
-| --- | --- | --- | --- |
-| Production baseline | `run_production_baseline.py` | Fixed 50-stock universe | Stable production-parameter reference run |
-| S&P 500 research | `research/run_sp500_research.py` | Current S&P 500 constituents | Scalability, liquidity, sector, and execution research |
-| Historical S&P 500 research | `research/run_historical_sp500.py` | Dated membership CSV | Point-in-time universe and survivorship-bias comparison |
-| Walk-forward validation | `research/run_walk_forward.py` | Configured validation universe | Rolling or expanding out-of-sample robustness testing |
-
-Run the modes from the repository root:
-
-```powershell
-# Production 50-stock baseline
-.\.venv\Scripts\python.exe run_production_baseline.py
-
-# Current S&P 500 scalability research
-.\.venv\Scripts\python.exe research\run_sp500_research.py
-
-# Historical S&P 500 point-in-time research (requires membership CSV)
-$env:HISTORICAL_CONSTITUENTS_FILE = "C:\path\to\point_in_time_membership.csv"
-.\.venv\Scripts\python.exe research\run_historical_sp500.py
-
-# Walk-forward out-of-sample validation
-.\.venv\Scripts\python.exe research\run_walk_forward.py
+```mermaid
+flowchart LR
+    A["Data Layer<br/>prices, volumes, constituents, factors"] --> B["Strategy Layer<br/>momentum + pullback"]
+    B --> C["Portfolio Layer<br/>inverse-vol + vol targeting"]
+    C --> D["Execution Layer<br/>costs, slippage, impact, capacity"]
+    D --> E["Analytics Layer<br/>metrics, CAPM, FF3/FF5, regimes"]
+    E --> F["Reporting Layer<br/>CSV, metadata, dashboards"]
+    G["Research Layer<br/>S&P 500, walk-forward, survivorship"] --> A
+    G --> F
 ```
 
-`run_backtest.py` remains a backwards-compatible production baseline entry point.
+```mermaid
+flowchart TD
+    A["Choose mode"] --> B{"Universe mode"}
+    B --> C["CUSTOM_UNIVERSE<br/>50-stock production baseline"]
+    B --> D["CURRENT_SP500<br/>scalability research"]
+    B --> E["HISTORICAL_SP500<br/>dated membership CSV"]
+    C --> F["Run strategies"]
+    D --> F
+    E --> F
+    F --> G["Portfolio construction"]
+    G --> H["Execution + capacity"]
+    H --> I["Factor / regime / walk-forward analytics"]
+    I --> J["Timestamped reports"]
+```
 
-## Quick Start
+## Feature Overview
+
+| Area | Implemented |
+| --- | --- |
+| Strategy research | Momentum and pullback mean-reversion sleeves |
+| Portfolio construction | Inverse-volatility sleeve allocation and volatility targeting |
+| Universe support | Fixed 50-stock baseline, current S&P 500, point-in-time membership framework |
+| Data quality | Missing-data filter, low-price filter, ticker normalization, batch downloads |
+| Liquidity | Lagged average dollar volume eligibility and participation diagnostics |
+| Execution realism | Transaction costs, fixed/adaptive slippage, market impact, capacity curves |
+| Analytics | Returns, volatility, Sharpe, drawdown, turnover, gross/sector exposure |
+| Factor attribution | CAPM, Fama-French 3-factor, optional 5-factor, rolling exposures |
+| Robustness | Rolling/expanding walk-forward validation and parameter stability |
+| Reporting | Timestamped CSVs, metadata snapshots, dashboards, research plots |
+
+## Sample Dashboards
+
+### Production Performance
+
+![Production dashboard](docs/assets/production_dashboard.png)
+
+### Execution And Capacity
+
+![Execution dashboard](docs/assets/execution_dashboard.png)
+
+![Capacity curves](docs/assets/capacity_curves.png)
+
+### Execution Scenario Comparison
+
+![Impact comparison](docs/assets/impact_comparison.png)
+
+### Rolling Factor Exposures
+
+![Factor exposures](docs/assets/factor_exposures.png)
+
+### Survivorship Framework Example
+
+![Survivorship analysis](docs/assets/survivorship_bias_analysis.png)
+
+## Technical Stack
+
+- Python
+- pandas, NumPy
+- matplotlib
+- yfinance
+- statsmodels
+- SciPy, optional research optimizer only
+- Standard-library HTML/CSV/ZIP handling for S&P 500 and Ken French data retrieval
+
+## Installation
 
 Python 3.10 or newer is recommended.
 
 ```powershell
+cd Trading-Backtester
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install pandas numpy matplotlib yfinance statsmodels scipy
-python run_production_baseline.py
+python -m pip install -r requirements.txt
 ```
 
-`scipy` is used only when the optional constrained portfolio research optimizer is enabled. Factor analysis downloads official Ken French factor files at run time when enabled.
+The project downloads market data at runtime. Internet access is required for Yahoo Finance, current S&P 500 constituents, and Ken French factor files.
+
+For a short release/run guide, see `RELEASE_CHECKLIST.md`.
+
+## How To Run
+
+```powershell
+# Production 50-stock baseline
+python run_production_baseline.py
+
+# Backwards-compatible main runner
+python run_backtest.py
+
+# Current S&P 500 scalability and execution research
+python research\run_sp500_research.py
+
+# Walk-forward out-of-sample validation
+python research\run_walk_forward.py
+
+# Historical S&P 500 point-in-time research
+$env:HISTORICAL_CONSTITUENTS_FILE = ".\data\historical_sp500_constituents.csv"
+python research\run_historical_sp500.py
+```
+
+Reports are saved under `reports/<mode>/<timestamp>/`.
 
 ## Configuration
 
-Primary settings are in `config/config.py`. The mode definitions in `config/modes.py` provide coherent baseline, S&P 500, and walk-forward profiles.
+Primary settings live in `config/config.py`; mode profiles live in `config/modes.py`.
 
-| Configuration Area | Key Settings | Purpose |
-| --- | --- | --- |
-| Universe | `UNIVERSE_MODE`, `HISTORICAL_CONSTITUENTS_FILE`, `TICKERS`, `BENCHMARK_TICKER` | Choose `CUSTOM_UNIVERSE`, `CURRENT_SP500`, or `HISTORICAL_SP500`. |
-| Dates and strategy | `START_DATE`, `END_DATE`, `MOMENTUM_LOOKBACK`, `TOP_N`, `REBALANCE_FREQ` | Define the backtest period and existing strategy defaults. |
-| Data quality | `MAX_MISSING_DATA_FRACTION`, `MIN_STOCK_PRICE`, `DATA_DOWNLOAD_BATCH_SIZE` | Filter incomplete or impractical data and support large downloads. |
-| Liquidity | `ENABLE_LIQUIDITY_FILTER`, `MIN_AVERAGE_DOLLAR_VOLUME`, `ADV_LOOKBACK_WINDOW` | Apply lagged rolling dollar-volume eligibility when volume is available. |
-| Position risk | `MAX_POSITION_WEIGHT` | Optionally cap individual position weights. |
-| Execution | `TRANSACTION_COST`, `SLIPPAGE_MODEL`, `SLIPPAGE_BPS` | Control transaction costs and fixed or adaptive slippage assumptions. |
-| Market impact | `ENABLE_MARKET_IMPACT`, `MARKET_IMPACT_MODEL`, `MAX_ADV_PARTICIPATION`, `IMPACT_COEFFICIENT`, `CAPACITY_TARGET_DOLLARS` | Estimate trade-size impact and constrain capacity assumptions against lagged ADV. |
-| Reporting | `SAVE_REPORTS`, `SAVE_PLOTS`, `SAVE_INDIVIDUAL_PLOTS`, `VERBOSE_ANALYTICS` | Control exported artifacts and console detail. |
-| Factor analysis | `ENABLE_FACTOR_ANALYSIS`, `ENABLE_FF5_ANALYSIS`, `FACTOR_FREQUENCY`, `FACTOR_ROLLING_WINDOW` | Configure attribution and rolling exposure reporting. |
-| Walk-forward | `WALK_FORWARD_MODE`, `WALK_FORWARD_TRAIN_LENGTH`, `WALK_FORWARD_TEST_LENGTH`, `WALK_FORWARD_STEP_LENGTH` | Configure out-of-sample evaluation windows. |
+| Setting | Purpose |
+| --- | --- |
+| `UNIVERSE_MODE` | `CUSTOM_UNIVERSE`, `CURRENT_SP500`, or `HISTORICAL_SP500` |
+| `HISTORICAL_CONSTITUENTS_FILE` | Dated point-in-time membership CSV path |
+| `ENABLE_LIQUIDITY_FILTER` | Apply lagged ADV eligibility |
+| `MAX_POSITION_WEIGHT` | Optional single-name position cap |
+| `SLIPPAGE_MODEL` | `fixed`, `volatility_adjusted`, or `turnover_adjusted` |
+| `ENABLE_MARKET_IMPACT` | Deduct modeled market impact from returns |
+| `CAPACITY_TARGET_DOLLARS` | Capital assumption for execution realism |
+| `ENABLE_FACTOR_ANALYSIS` | Export Ken French factor attribution |
+| `VERBOSE_ANALYTICS` | Print detailed console diagnostics |
 
-The fixed baseline defaults preserve the original execution path. Advanced liquidity constraints, adaptive slippage, market impact charges, S&P 500 selection, and constrained optimization are research controls that can be enabled explicitly. Capacity diagnostics can still be reported while market impact charges are disabled.
+## Strategy Overview
 
-## Point-In-Time Constituents
+Momentum sleeve:
 
-`data/constituents.py` provides the historical-universe framework. Configure `HISTORICAL_CONSTITUENTS_FILE` with a CSV containing one row per continuous membership interval:
+- Computes lookback momentum and trailing volatility.
+- Scores names by momentum divided by volatility.
+- Keeps positive-momentum names only.
+- Rebalances on configured intervals.
+- Uses the same signal logic in production, S&P 500 research, and walk-forward validation.
+
+Pullback mean-reversion sleeve:
+
+- Requires a longer-term uptrend.
+- Selects controlled short-term pullbacks.
+- Avoids extreme crash-style moves.
+- Rebalances independently from the momentum sleeve.
+
+Production portfolio:
+
+- Combines sleeves using inverse realized volatility.
+- Applies optional volatility targeting.
+- Preserves fixed production parameters for benchmark validation.
+
+## Execution Realism
+
+Execution assumptions are layered and optional:
+
+1. Transaction costs are charged on turnover.
+2. Slippage can be fixed, volatility-adjusted, or turnover-adjusted.
+3. Market impact uses trade size, lagged ADV, realized volatility, and participation rate.
+4. Capacity analysis estimates deployable capital before ADV participation becomes excessive.
+
+Market impact is disabled by default to preserve the original production return path while still exporting modeled diagnostics.
+
+## Factor Analysis
+
+Factor attribution uses official Kenneth R. French factor files and `statsmodels` OLS.
+
+Supported models:
+
+- CAPM: market excess return
+- Fama-French 3-factor: market, SMB, HML
+- Optional Fama-French 5-factor: market, SMB, HML, RMW, CMA
+
+Portfolio returns are aligned with realized factor observations. Factors are attribution-only and are not used in signal generation or portfolio construction.
+
+## Walk-Forward Validation
+
+The walk-forward framework supports rolling and expanding windows. It compares:
+
+- Train-selected parameters chosen by in-sample Sharpe.
+- Fixed production parameters held constant across windows.
+
+The validation result showed that fixed production parameters were more stable and defensible than noisy window-by-window parameter rotation.
+
+## Survivorship Framework
+
+`data/constituents.py` supports point-in-time historical membership with explicit `entry_date` and optional `exit_date`.
+
+Expected CSV schema:
 
 ```csv
 ticker,entry_date,exit_date,security,sector,sub_industry,event_reason,source
@@ -108,171 +212,106 @@ ABC,2018-06-01,2021-09-30,Example Corp,Industrials,,removed,point_in_time_provid
 XYZ,2020-01-15,,Example Holdings,Financials,,added,point_in_time_provider
 ```
 
-Required columns are `ticker` and `entry_date`. `exit_date` is optional and blank for a security still active at the end of the supplied history. Dates are inclusive: a security is eligible from `entry_date` through `exit_date`, then forced out of holdings after its supplied exit.
+Historical mode:
 
-Set `HISTORICAL_CONSTITUENTS_FILE` in `config/config.py` or provide the environment variable shown above. Alternatively, set `UNIVERSE_MODE = "HISTORICAL_SP500"` and run `run_backtest.py` directly.
+- Downloads the union of all supplied historical members.
+- Applies membership eligibility only between entry and exit dates.
+- Forces positions out after supplied exit dates.
+- Exports unavailable vendor price histories.
+- Compares point-in-time membership against end-date survivor-only membership.
 
-In historical mode:
+The repository does not ship a licensed historical S&P 500 constituent database. A real survivorship-bias-free study requires an authoritative point-in-time membership source and price data with delisted-security coverage.
 
-- The downloaded universe is the union of all tickers in the membership history, including removed names.
-- Missing-data completeness filtering is not used to discard historical names solely because they later leave the index.
-- The daily point-in-time membership mask is combined with existing liquidity eligibility before strategy selection.
-- A survivor-only comparison holds the same strategy rules against only members active at the end of the supplied period.
-- Membership histories without returned market-data coverage are exported in `unavailable_historical_prices.csv`.
+## Example Validated Outputs
 
-## Market Impact And Capacity
+Validation date: May 28, 2026. Period: configured `2020-01-01` to `2023-01-01`.
 
-`execution/market_impact.py` models rebalance trades as portfolio-weight changes multiplied by `CAPACITY_TARGET_DOLLARS`. Each trade is evaluated against lagged rolling average dollar volume and lagged realized volatility, keeping the execution estimate free from same-day liquidity lookahead.
+| Run | Market Impact | Ann. Return | Volatility | Sharpe | Max DD | FF3 Alpha | Capacity |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Production baseline | OFF | 22.89% | 13.63% | 1.5806 | -8.65% | 19.37% | $1.83B |
+| Production baseline | ON | 22.63% | 13.63% | 1.5653 | -8.66% | 19.17% | $1.83B |
+| Current S&P 500 research | OFF | 9.83% | 15.26% | 0.6906 | -12.31% | 6.28% | $248.0M |
+| Current S&P 500 research | ON | 9.08% | 15.29% | 0.6450 | -12.46% | 5.60% | $247.6M |
 
-Two optional impact specifications are available:
+Walk-forward validation:
 
-| Model | Impact Rate |
-| --- | --- |
-| `square_root` | `IMPACT_COEFFICIENT * realized_volatility * sqrt(participation_rate)` |
-| `linear` | `IMPACT_COEFFICIENT * realized_volatility * participation_rate` |
+| Path | Impact OFF Avg Test Sharpe | Impact ON Avg Test Sharpe | Positive Test Fraction | Estimated Capacity |
+| --- | ---: | ---: | ---: | ---: |
+| Selected parameters | 0.8481 | 0.8315 | 66.67% | $2.24B |
+| Fixed production parameters | 1.0426 | 1.0265 | 66.67% | $2.58B |
 
-Participation rate is traded dollars divided by lagged ADV. Estimated capacity is reported as a conservative lower-tail capital level at which trade participation reaches `MAX_ADV_PARTICIPATION`; a binding minimum capacity estimate and breach frequency are also exported. When `ENABLE_MARKET_IMPACT = False`, modeled costs and capacity remain visible for research, but zero market impact is deducted from returns.
+Key interpretation:
 
-## Walk-Forward Research
+- Strongest research result: fixed 50-stock production baseline.
+- Most realistic scalable result: current S&P 500 research with market impact ON.
+- Execution realism reduced S&P 500 research Sharpe by roughly `0.046`.
+- Fixed production parameters outperformed selected parameters on average OOS Sharpe.
 
-The walk-forward runner supports both rolling-window and expanding-window studies. For each test period it evaluates:
-
-- A train-selected parameter path chosen using training-window results.
-- A fixed-production-parameter path using the unchanged production defaults.
-
-This comparison directly tests whether parameter selection improves out-of-sample performance or merely adds instability. Reported outputs include train and test metrics, test-period CAPM summaries, Sharpe degradation, drawdown comparisons, positive test-period fraction, and parameter stability information.
-
-Key exports include:
-
-```text
-selected_results.csv
-fixed_parameter_results.csv
-path_comparison.csv
-parameter_summary.csv
-stability_summary.csv
-rolling_metrics.csv
-fixed_rolling_metrics.csv
-```
-
-## Factor Attribution
-
-Factor attribution extends the existing SPY-based CAPM workflow without changing signals or positions. The reporting layer retrieves factor data from the official [Kenneth R. French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html) and estimates regressions with `statsmodels` OLS, using HAC/Newey-West standard errors by default.
-
-| Model | Exposures |
-| --- | --- |
-| CAPM | Market excess return (`Mkt-RF`) |
-| Fama-French 3-factor | `Mkt-RF`, size (`SMB`), value (`HML`) |
-| Fama-French 5-factor | `Mkt-RF`, `SMB`, `HML`, profitability (`RMW`), investment (`CMA`) |
-
-Daily attribution aligns realized portfolio returns to factor observations on the same realized trading dates. Monthly attribution compounds portfolio returns to calendar months before matching monthly factor data. Factors are used for after-the-fact analysis only, avoiding lookahead into strategy construction.
-
-Exports include:
-
-```text
-factor_summary.csv
-rolling_factor_exposures.csv
-```
-
-## Reporting Artifacts
-
-When `SAVE_REPORTS = True`, every mode creates a timestamped experiment directory:
-
-```text
-reports/
-|-- production_baseline/
-|   `-- <timestamp>/
-|-- sp500_research/
-|   `-- <timestamp>/
-|-- historical_sp500_research/
-|   `-- <timestamp>/
-`-- walk_forward_validation/
-    `-- <timestamp>/
-```
-
-Each experiment folder can contain:
-
-- Summary and detailed metrics tables in CSV format
-- CAPM, factor, exposure, sector, or walk-forward result tables where applicable
-- `execution_costs.csv`, `capacity_summary.csv`, and `market_impact_analysis.csv`
-- Capacity sensitivity, impact comparison, expensive-trade, impact-date, and liquidity-bottleneck tables in research modes
-- Historical-universe runs export `constituent_history.csv`, `universe_turnover.csv`, `annual_membership_changes.csv`, `survivorship_comparison.csv`, and `unavailable_historical_prices.csv`
-- `comparison_dashboard.png`, combining headline performance views for quick review
-- `execution_dashboard.png`, `capacity_curves.png`, and `impact_comparison.png` for execution-realism research modes
-- `survivorship_bias_analysis.png` for point-in-time historical-universe runs
-- Rolling performance and rolling factor exposure plots
-- `experiment_metadata.json`, recording the timestamp, universe, configuration snapshot, and execution assumptions
-
-Set `VERBOSE_ANALYTICS = True` for detailed console reporting. The default console output stays focused on headline metrics while detailed results remain available in exported artifacts.
-
-## Project Structure
+## Repository Structure
 
 ```text
 Trading-Backtester/
-|-- analytics/
-|   |-- factors.py                # CAPM, FF3/FF5, and rolling factor exposures
-|   |-- factor_regression.py      # Existing benchmark regression workflow
-|   |-- exposure.py               # Gross and sector exposure analytics
-|   |-- metrics.py                # Portfolio performance metrics
-|   |-- regime_analysis.py        # Regime-based performance reporting
-|   `-- rolling.py                # Rolling performance statistics
-|-- config/
-|   |-- config.py                 # User configuration and production defaults
-|   `-- modes.py                  # Explicit production/research mode profiles
-|-- data/
-|   |-- loader.py                 # Historical price and volume loading
-|   |-- liquidity.py              # ADV-based eligibility filters
-|   |-- sp500.py                  # Current S&P 500 constituents and sectors
-|   `-- constituents.py           # Dated point-in-time membership and turnover
-|-- engine/
-|   `-- backtest.py               # Backtest orchestration
-|-- execution/
-|   |-- slippage.py               # Fixed and optional adaptive slippage models
-|   `-- market_impact.py          # ADV participation and capacity diagnostics
-|-- portfolio/
-|   |-- optimization.py           # Optional research-only constrained optimizer
-|   `-- vol_targeting.py          # Volatility targeting utilities
-|-- reporting/
-|   |-- experiments.py            # Metadata and structured report exports
-|   `-- plots.py                  # Dashboard and research plots
-|-- research/
-|   |-- walk_forward.py           # Windowing, evaluation, and result structures
-|   |-- run_walk_forward.py       # Walk-forward comparison runner
-|   |-- run_sp500_research.py     # Current S&P 500 research runner
-|   |-- run_historical_sp500.py   # Point-in-time membership research runner
-|   |-- momentum_tuning.py        # Momentum research helpers
-|   `-- mean_reversion_tuning.py  # Mean reversion research helpers
-|-- strategies/
-|   |-- momentum.py               # Momentum strategy logic
-|   |-- mean_reversion.py         # Pullback strategy logic
-|   `-- position_sizing.py        # Position cap utilities
-|-- docs/
-|   `-- project_plan.md           # Development roadmap
-|-- run_backtest.py               # Backwards-compatible main runner
-`-- run_production_baseline.py    # Production baseline launcher
+|-- analytics/                 # Metrics, drawdowns, regressions, factors, regimes
+|-- config/                    # Central settings and named experiment modes
+|-- data/                      # Price loading, liquidity, S&P 500, PIT constituents
+|-- docs/                      # Project docs and README visual assets
+|-- engine/                    # Backtest return and turnover engine
+|-- execution/                 # Slippage, market impact, capacity modeling
+|-- portfolio/                 # Vol targeting, regime helpers, optional optimizer
+|-- reporting/                 # Plotting and report export utilities
+|-- research/                  # S&P 500, walk-forward, historical-universe runners
+|-- strategies/                # Momentum, mean reversion, position sizing
+|-- run_backtest.py            # Main backwards-compatible runner
+|-- run_production_baseline.py # Production baseline launcher
+|-- requirements.txt
+|-- RELEASE_CHECKLIST.md
+|-- LICENSE
+`-- CONTRIBUTING.md
 ```
 
-## Example Validated Results
+## Report Outputs
 
-The following outputs are from the configured historical test window used during development. They are examples of the platform output, not live performance claims or investment advice.
+Typical report folders contain:
 
-| Run | Annualized Return | Sharpe | Maximum Drawdown |
-| --- | ---: | ---: | ---: |
-| Fixed 50-stock production baseline | 22.89% | 1.58 | -8.65% |
-| Current S&P 500 research universe after filtering | 9.83% | 0.69 | -12.31% |
+- `summary_metrics.csv`
+- `capm_summary.csv`
+- `factor_summary.csv`
+- `rolling_factor_exposures.csv`
+- `execution_costs.csv`
+- `capacity_summary.csv`
+- `market_impact_analysis.csv`
+- `comparison_dashboard.png`
+- `execution_dashboard.png`
+- `capacity_curves.png`
+- `impact_comparison.png`
+- `experiment_metadata.json`
 
-In the current S&P 500 research run, 503 constituents were retrieved and 487 were retained after filtering. In the walk-forward comparison, the fixed-production-parameter path achieved a higher average test Sharpe than the train-selected path, supporting the decision to keep production parameters stable while continuing robustness research.
+Historical-universe runs can additionally export:
 
-## Data And Methodology Assumptions
+- `constituent_history.csv`
+- `universe_turnover.csv`
+- `annual_membership_changes.csv`
+- `survivorship_comparison.csv`
+- `unavailable_historical_prices.csv`
+- `survivorship_bias_analysis.png`
 
-- Historical equity prices and available volume data are downloaded through `yfinance`.
-- S&P 500 constituents and sectors represent the current list retrieved for the research run, not historical membership.
-- Historical S&P 500 analysis uses only the membership intervals supplied in `HISTORICAL_CONSTITUENTS_FILE`; the repository does not bundle a licensed point-in-time constituent database.
-- Delisted names remain requestable in the historical universe and are not dropped solely for post-exit missingness, but Yahoo may not provide full delisted or terminal-event return histories. Missing symbol histories are explicitly exported.
-- Missing-data and low-price filters are applied before eligible names are selected for trading.
-- Liquidity eligibility uses lagged rolling average dollar volume when volume is available, so current-day volume is not used to choose current-day positions.
-- Execution models estimate transaction costs, slippage, and liquidity-based market impact; they do not model complete institutional capacity, borrow constraints, or point-in-time corporate actions.
-- Factor models are attribution tools and do not feed into strategy signals or portfolio optimization by default.
+## Limitations And Assumptions
 
-## Scope
+- Current S&P 500 mode is a current-constituent scalability test, not a survivorship-bias-free historical study.
+- Historical S&P 500 mode requires an external point-in-time constituent file.
+- Yahoo Finance may not provide complete delisted-security or terminal-event histories.
+- Market impact is a stylized ADV/volatility/participation model, not a broker-grade simulator.
+- Walk-forward validation currently has limited windows under the default 2020-2023 date range.
+- Results are research outputs, not investment advice or live trading recommendations.
 
-The repository is a systematic research platform focused on transparent signal evaluation, portfolio risk handling, and out-of-sample robustness. It is not an execution system, brokerage integration, or investment recommendation.
+## Future Roadmap
+
+- Plug in licensed point-in-time constituent and delisted-return data.
+- Add CI tests around report generation and key invariants.
+- Add optional command-line arguments for mode/config overrides.
+- Add a small sample offline dataset for deterministic demo runs.
+- Extend documentation with a methods paper-style writeup.
+
+## Public Release Status
+
+This repository is presentation-ready as a systematic equity research platform. The strongest part of the project is the full research stack: signal generation, portfolio construction, execution realism, factor attribution, walk-forward validation, and reproducible reporting. The main intentionally unfinished piece is true survivorship-bias-free benchmarking, which depends on data that should be sourced from a point-in-time constituent and delisted-security vendor rather than fabricated inside the repository.

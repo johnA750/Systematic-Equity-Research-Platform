@@ -1,4 +1,23 @@
 .venv/
+.env
+.env.*
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Generated reports and local research outputs
 reports/
+momentum_tuning_results.csv
+mean_reversion_tuning_results.csv
+
+# Private or licensed point-in-time constituent datasets
+data/historical_sp500_constituents.csv
+data/*constituent*history*.csv
+!docs/assets/
+!docs/assets/*.png
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
