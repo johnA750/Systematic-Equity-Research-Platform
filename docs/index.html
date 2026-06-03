@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Institutional-style systematic equity research platform with execution realism, factor attribution, walk-forward validation, and scalable universe testing.">
+  <meta name="description" content="Python research platform for constructing, backtesting, and evaluating systematic equity strategies with realistic portfolio and execution assumptions.">
   <title>Systematic Equity Research Platform</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="brand" href="#top">Trading Backtester</a>
+      <a class="brand" href="#top">Systematic Equity Research Platform</a>
       <div class="nav-links" aria-label="Primary navigation">
         <a href="#architecture">Architecture</a>
         <a href="#results">Results</a>
@@ -24,10 +24,10 @@
   <main id="top">
     <section class="hero section">
       <div class="hero-copy">
-        <p class="eyebrow">Institutional-style quantitative research platform</p>
-        <h1>Systematic equity backtesting with execution realism, factor attribution, and out-of-sample validation.</h1>
+        <p class="eyebrow">Strategy, portfolio, and execution research</p>
+        <h1>Systematic equity strategy research with realistic portfolio and execution assumptions.</h1>
         <p class="lead">
-          A Python research stack for testing momentum and pullback strategy sleeves across a production 50-stock baseline and scalable S&P 500 research universe.
+          Python research platform for constructing, backtesting, and evaluating systematic equity strategies with transaction costs, slippage, execution modeling, risk management, and performance evaluation.
         </p>
         <div class="hero-actions">
           <a class="button primary" href="https://github.com/johnA750/Trading-Backtester">View Repository</a>
@@ -57,13 +57,13 @@
     <section class="section compact">
       <div class="section-heading">
         <p class="eyebrow">Project Story</p>
-        <h2>Research engine to realistic validation stack</h2>
+        <h2>From signals to full strategy validation</h2>
       </div>
       <div class="story-grid">
         <article>
           <span class="step">01</span>
-          <h3>Signal Research</h3>
-          <p>Momentum and pullback sleeves are intentionally simple, auditable, and parameterized without changing production logic.</p>
+          <h3>Strategy Development</h3>
+          <p>Momentum and pullback sleeves are intentionally simple and auditable, then converted into portfolio weights and rebalanced strategies.</p>
         </article>
         <article>
           <span class="step">02</span>
@@ -72,7 +72,7 @@
         </article>
         <article>
           <span class="step">03</span>
-          <h3>Validation</h3>
+          <h3>Backtesting And Validation</h3>
           <p>Walk-forward tests compare selected parameters against fixed production defaults to measure stability and out-of-sample decay.</p>
         </article>
         <article>
@@ -86,7 +86,7 @@
     <section id="architecture" class="section">
       <div class="section-heading">
         <p class="eyebrow">Architecture</p>
-        <h2>Modular research and production paths</h2>
+        <h2>Modular strategy research and production paths</h2>
       </div>
       <div class="diagram architecture-diagram" role="img" aria-label="Architecture diagram">
         <div>Data<br><span>prices, volumes, constituents, factors</span></div>
@@ -110,7 +110,7 @@
         <p class="eyebrow">Strategies</p>
         <h2>Simple signals, realistic portfolio construction</h2>
         <p>
-          The system combines a trailing momentum sleeve with a pullback-based mean-reversion sleeve. The production path keeps fixed parameters and blends sleeve returns with inverse-volatility weights.
+          The system combines a trailing momentum sleeve with a pullback-based mean-reversion sleeve. The production path keeps fixed parameters and turns sleeves into a portfolio using inverse-volatility weights, risk controls, and execution assumptions.
         </p>
       </div>
       <div class="detail-list">
@@ -140,7 +140,7 @@
         <p class="eyebrow">Factor Analysis</p>
         <h2>Fama-French attribution beyond simple CAPM</h2>
         <p>
-          The analytics layer supports CAPM, Fama-French 3-factor, optional 5-factor frameworks, factor t-stats and p-values, and rolling exposure plots using statsmodels OLS.
+          Factor analysis is used as portfolio attribution after strategy backtests are built. The analytics layer supports CAPM, Fama-French 3-factor, optional 5-factor frameworks, factor t-stats and p-values, and rolling exposure plots using statsmodels OLS.
         </p>
       </div>
       <div class="detail-list">
@@ -296,7 +296,7 @@
     <section class="section stack">
       <div>
         <p class="eyebrow">Technical Stack</p>
-        <h2>Python-first, reproducible, and inspectable</h2>
+        <h2>Python-first strategy research, reproducible and inspectable</h2>
       </div>
       <div class="pill-row">
         <span>Python</span>
@@ -312,7 +312,7 @@
   </main>
 
   <footer class="footer">
-    <p>Systematic Equity Backtesting and Research Platform</p>
+    <p>Systematic Equity Research Platform</p>
     <a href="https://github.com/johnA750/Trading-Backtester">Repository</a>
   </footer>
 

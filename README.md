@@ -1,8 +1,10 @@
-# Systematic Equity Backtesting And Research Platform
+# Systematic Equity Research Platform
 
-Institutional-style Python research platform for systematic U.S. equity strategy testing, portfolio construction, execution realism, factor attribution, walk-forward validation, and point-in-time universe research.
+Python research platform for constructing, backtesting, and evaluating systematic equity strategies with realistic portfolio and execution assumptions.
 
-This project is designed as a transparent quantitative research stack: simple auditable signals, realistic portfolio and execution assumptions, reproducible reports, and explicit separation between production-style defaults and research diagnostics.
+This project is focused on strategy development, portfolio construction, backtesting, transaction costs, slippage, execution modeling, risk management, and performance evaluation.
+
+Positioning note: the separate Factor Research & Signal Analytics Platform evaluates whether signals work. This Systematic Equity Research Platform turns signals into portfolios and tests full strategies under realistic execution and risk assumptions.
 
 ## Project Overview
 
@@ -11,9 +13,9 @@ The platform evaluates two long-only equity sleeves:
 - Momentum: ranks equities by trailing risk-adjusted strength and holds top names.
 - Pullback mean reversion: buys controlled short-term pullbacks within longer-term uptrends.
 
-The production portfolio combines sleeves with inverse-volatility weights, applies optional volatility targeting, models transaction costs and slippage, and exports performance, exposure, factor, execution, and robustness reports.
+The production portfolio combines sleeves with inverse-volatility weights, applies optional volatility targeting, models transaction costs and slippage, and exports performance, risk, exposure, execution, and robustness reports.
 
-The research layer adds current S&P 500 scaling, optional point-in-time historical membership, market impact and capacity analysis, Fama-French attribution, and selected-versus-fixed walk-forward validation.
+The research layer adds current S&P 500 scaling, optional point-in-time historical membership, market impact and capacity analysis, Fama-French attribution, and selected-versus-fixed walk-forward validation for full strategy evaluation.
 
 ## Architecture
 
@@ -47,8 +49,9 @@ flowchart TD
 
 | Area | Implemented |
 | --- | --- |
-| Strategy research | Momentum and pullback mean-reversion sleeves |
+| Strategy development | Momentum and pullback mean-reversion sleeves |
 | Portfolio construction | Inverse-volatility sleeve allocation and volatility targeting |
+| Backtesting | Daily return simulation, rebalancing, benchmark comparison, turnover tracking |
 | Universe support | Fixed 50-stock baseline, current S&P 500, point-in-time membership framework |
 | Data quality | Missing-data filter, low-price filter, ticker normalization, batch downloads |
 | Liquidity | Lagged average dollar volume eligibility and participation diagnostics |
@@ -56,7 +59,7 @@ flowchart TD
 | Analytics | Returns, volatility, Sharpe, drawdown, turnover, gross/sector exposure |
 | Factor attribution | CAPM, Fama-French 3-factor, optional 5-factor, rolling exposures |
 | Robustness | Rolling/expanding walk-forward validation and parameter stability |
-| Reporting | Timestamped CSVs, metadata snapshots, dashboards, research plots |
+| Reporting | Timestamped CSVs, metadata snapshots, dashboards, performance plots |
 
 ## Sample Dashboards
 
@@ -314,4 +317,4 @@ Historical-universe runs can additionally export:
 
 ## Public Release Status
 
-This repository is presentation-ready as a systematic equity research platform. The strongest part of the project is the full research stack: signal generation, portfolio construction, execution realism, factor attribution, walk-forward validation, and reproducible reporting. The main intentionally unfinished piece is true survivorship-bias-free benchmarking, which depends on data that should be sourced from a point-in-time constituent and delisted-security vendor rather than fabricated inside the repository.
+This repository is presentation-ready as a systematic strategy research platform. The strongest part of the project is the full portfolio research stack: strategy construction, portfolio construction, backtesting, execution realism, risk management, factor attribution, walk-forward validation, and reproducible reporting. The main intentionally unfinished piece is true survivorship-bias-free benchmarking, which depends on data that should be sourced from a point-in-time constituent and delisted-security vendor rather than fabricated inside the repository.

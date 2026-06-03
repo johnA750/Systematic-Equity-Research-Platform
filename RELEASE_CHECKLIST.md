@@ -2,6 +2,10 @@
 
 This checklist is the quick public-release guide for reviewers, recruiters, and future maintenance.
 
+Project description: Python research platform for constructing, backtesting, and evaluating systematic equity strategies with realistic portfolio and execution assumptions.
+
+Branding distinction: the Factor Research & Signal Analytics Platform evaluates whether signals work; this Systematic Equity Research Platform turns signals into portfolios and tests full strategies.
+
 ## Install
 
 ```powershell

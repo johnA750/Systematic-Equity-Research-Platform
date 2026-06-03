@@ -1,6 +1,6 @@
 # GitHub Pages Deployment
 
-The showcase site is a static, no-build GitHub Pages site in `docs/`.
+The Systematic Equity Research Platform showcase site is a static, no-build GitHub Pages site in `docs/`.
 
 ## Recommended Configuration
 
